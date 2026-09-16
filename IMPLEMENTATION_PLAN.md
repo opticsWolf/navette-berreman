@@ -4042,7 +4042,90 @@ Live validation scripts from the Sep-2025 session (re-runnable):
 `validate_live_berremueller.py`, `validate_berreman4x4.py`, `validate_stress.py`
 (all drive the *installed* `navette` wheel + live sources).
 
-## Appendix B — Per-phase acceptance checklist (copy into each PR)
+## Appendix B — Architecture review: Rust-only kernels, thin Python (post-P10)
+
+Mandate: hold the implementation to the module docstring's own claim —
+"owns no physics: every number comes from the Rust sweep" — the same contract
+upstream `navette` states for `smatrix.py`. Reviewed `navette/berreman.py`
+(751 lines), `berreman_materials.py` (320) against `pybind.rs`/core.
+
+**Verdict: four Python-side numeric kernels found and moved to Rust (this
+appendix records what moved where and what re-pinned them); everything else
+was verified thin.** The upstream-idiomatic line we drew: dispatch, defaults,
+validation, warnings, `Layer`-list assembly and result shaping stay in Python
+(exactly what upstream's `smatrix.py`/`materials` `__init__.py` do); tensor
+*math* does not.
+
+**K1 — Route-2 graded profile (grade_interface) → `roughness::graded_tensors`.**
+The Gaussian-CDF volume fraction `f(z) = ½(1+erf(z/σ√2))` and the linear
+tensor mixing were Python (`math.erf` + numpy). Moved wholesale; Python keeps
+the shape validation and the `sigma ≤ 0 → []` semantic. Needed a
+double-precision `erf` in Rust (std has none; new deps forbidden): power
+series with a Neumaier-compensated sum for |x| ≤ 2.25 (the naive sum loses
+~5e-14 to cancellation at the top of the range), modified-Lentz continued
+fraction on Γ(½, x²) above (empirics: the raw convergent is UNNORMALIZED —
+exactly √π·erfc, so the 1/√π factor is applied; `FRAC_1_SQRT_PI` is behind
+unstable `more_float_constants` on our MSRV → local literal). Pinned by the
+new `roughness::graded_tests` (baked 17-digit libm references, ≤ 4e-16 abs
+in the series arm, odd symmetry exact, guards) + **G13f** in
+tests/test_graded.py: Rust kernel vs numpy/math.erf reference = **0.0**.
+
+**K2 — twist schedule (twisted_stack) → `rotations::twisted_tensors`.**
+Per-slice `rot_z(eps, twist·frac)` loop with the fraction schedule was Python
+(the rotation itself was already Rust — same code path, so output is
+bit-identical; G15d re-ran unchanged). Schedule now an enum (`Midpoint`,
+`Endpoint`) in Rust with the exact former formulas (`(k+½)/n`, `k/max(n−1,1)`
+via `n.max(2)−1`); Python maps the grid string → code (0/1) and marshals
+interleaved-18 → Layers. Pinned by `twist_tests::twisted_schedule_matches_rot_path`
+(slice-by-slice equality with the direct rot path, endpoint/n=1 edges,
+batch-helper agreement).
+
+**K3 — Pasteur mapping (chiral_layer) → `berreman::pasteur_tensors`.**
+`eps = n²I, rho = −iκI, rhop = +iκI, mu = μI` was materialized in Python while
+the convention lived in Rust test fixtures — two sources of truth for THE
+Phase-10a physics. Now a single Rust helper that both the Task-0 tests and the
+Python wrapper call (tests refactored; they additionally assert the helper's
+tensors match the fixtures exactly). Regime policy kept exact: |κ| ≥ 0.2n is a
+Python WARNING; **det = n²−κ² = 0 is deliberately NOT an error here** — that
+case flows to the solver's honest-NaN path because G15a is the regression gate
+for the §10.8 NaN backstops (a first draft hard-errored at |κ| ≥ n and broke
+that gate arm; caught on re-run). New hard errors are pure input validity only
+(n ≤ 0 / non-finite, μ ≤ 0 / non-finite — μ validity is a mild tightening,
+documented). Pinned by `pasteur_helper_tests::pasteur_tensors_mapping_and_guards`.
+
+**K4 — batched orientation (evaluate_tensor rotate) → `rotations::apply_rot_batch`.**
+The per-wavelength `R·ε·Rᵀ` was a numpy einsum while `apply_rot` already
+existed in Rust. New binding `rot_apply_matrix` (real 3×3 R over n tensors);
+`rotate` is now REAL-only — complex orientation matrices are rejected with a
+clear ValueError (previously silently accepted by einsum; an unconstrained
+complex similarity transform was never a supported semantic). Pinned by the
+batch test in K2's suite; the diag(2.25,2.89) G12/G15d paths re-ran green.
+
+**Verified thin (no action):** `solve()`/`fields()` (marshalling + duplicated
+validation that mirrors Rust errors — kept as defense in depth), `_squeeze`
+(ergonomics, never touches z), `_apply_m16`/`cloude` (broadcast loops over
+per-row Rust scalars — could batch later, not physics), `mueller_from_jones`,
+all rot_* (validation only), `kappa_table` (validation only),
+`grade_interface`'s shave/warn bookkeeping in `graded_stack` (geometric
+orchestration), `_ubf_array`/dispatch in `berreman_materials.py` (mirrors
+upstream's own Python split verbatim), `power_method` string mapping and `cx`
+complex assembly (presentation/marshalling).
+
+**Two API tightenings recorded (behavioral, intentional):** (1) unknown
+`method=` strings now raise `ValueError` with the valid list instead of a bare
+`KeyError`; (2) `grade_interface` rejects non-finite/non-positive
+`total_width_nm` (previously a negative width would have built negative-
+thickness layers silently). No other behavior change: full Python suite re-run
+— G5 2.18e-14, G7b/G9d/G7d, G8b–e, G10b–d, G11a/c, G12a/b, G13b–f, G14a–c,
+G15a–e, G15d pos/height/FWHM, e2e, FULL-PATH, energy gates all green; Rust 33
+lib tests (+4 new) + 2 integration.
+
+**Left as future work (explicitly, not silently):** batch the Mueller
+`_apply_m16`/`cloude` Python loops into one Rust call per array (perf only);
+vectorize `_flatten` marshalling (perf only); `cholesteric_stack`'s diag
+assembly stays Python (Layer-list assembly, upstream-idiomatic).
+
+## Appendix C — Per-phase acceptance checklist (copy into each PR)
 
 ```markdown
 - [ ] G1 cargo test --release green (paste count)

@@ -89,3 +89,30 @@ for sig in (2.0, 1.0, 0.5):
 assert errs[0.5] < errs[1.0] < errs[2.0], "Route-1/Route-2 not converging"
 assert errs[2.0] <= 5e-2, "model spread above absolute bound"
 print("G13e PASS")
+
+# --- G13f: Rust graded kernel == numpy/math.erf reference (cross-language) --
+# Architecture review moved the Gaussian-CDF profile + volume-weighted mixing
+# into roughness::graded_tensors; this pin keeps the Python-side reference
+# formula as an independent oracle for the shipped kernel.
+print("--- G13f ---")
+import math
+
+for eps_a, eps_b, sig, width in ((2.25 + 0.1j, 3.1 - 0.2j, 2.0, None),
+                                 (np.diag([2.0, 2.5, 2.2]).astype(complex),
+                                  np.diag([3.0, 2.4, 2.9]).astype(complex),
+                                  1.5, 9.0)):
+    n = 11
+    subs = bl.grade_interface(eps_a, eps_b, sig, n, total_width_nm=width)
+    ta, tb = np.asarray(bl._as_tensor(eps_a)), np.asarray(bl._as_tensor(eps_b))
+    w = 6.0 * sig if width is None else width
+    dz = w / n
+    worst = 0.0
+    for k, lay in enumerate(subs):
+        z = -0.5 * w + (k + 0.5) * dz
+        f = 0.5 * (1.0 + math.erf(z / (sig * math.sqrt(2.0))))
+        want = (1.0 - f) * ta + f * tb
+        worst = max(worst, float(np.max(np.abs(np.asarray(lay.eps) - want))))
+    assert worst <= 1e-15, f"G13f kernel/reference mismatch: {worst:.3e}"
+    assert abs(sum(l.thickness_nm for l in subs) - w) < 1e-12
+print(f"G13f: Rust graded kernel vs numpy/math.erf reference = {worst:.2e}")
+print("G13f PASS")

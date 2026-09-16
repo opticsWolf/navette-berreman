@@ -6,6 +6,30 @@ for optical birefringent multilayer systems, styled after the existing
 a self-contained complex eigensolver — no LAPACK); an optional `python` feature
 builds a PyO3 extension module (`navette._berreman`) for use from NumPy.
 
+## Architecture (same split as upstream `navette`)
+
+Every numeric kernel lives in Rust; the Python layer owns only validation,
+marshalling and result shaping — the same contract as upstream `navette`'s
+`smatrix.py` ("owns no physics"):
+
+| kernel | Rust home | Python role |
+|---|---|---|
+| Berreman matrices, eigensolver, partial waves | `berreman.rs`, `cmatrix.rs` | — |
+| Redheffer SM / TM / EM propagation, periodic power | `transfer.rs`, `expm.rs` | — |
+| Route-1 roughness form factors, Route-2 graded profile (erf) | `roughness.rs` | `_norm_rough` validation only |
+| internal fields E(z)/H(z), absorption | `fields.rs` | z-array marshalling |
+| rotations (Rodrigues/Euler/quat), twist schedule | `rotations.rs` | arg validation |
+| materials (23 models + 7 EMA), ε↔n̂ | `materials.rs` (upstream crate) | spec dispatch/defaults (upstream-idiomatic) |
+| Mueller suite (DI/D/P/CD/Cloude) | `mueller.rs` | broadcasting loop over flat-16 rows |
+| Pasteur mapping κ→(ρ,ρ′) | `berreman::pasteur_tensors` | warning regime + Layer build |
+| Rayon (λ, θ) sweeps, NaN policy | `pybind.rs` | dict assembly, squeezing |
+
+Stack *construction* helpers (`twisted_stack`, `grade_interface`,
+`graded_stack`, `cholesteric_stack`, `chiral_layer`) stay in Python as
+`Layer`-list builders, but their math (rotation schedule, Gaussian-CDF mixing,
+Pasteur tensor mapping) is called from Rust — pinned exact by G13f (0.0 vs the
+numpy reference).
+
 ## What it computes
 
 For a stack of (generally anisotropic, optionally magneto-optic) layers between

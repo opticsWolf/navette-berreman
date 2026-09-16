@@ -31,6 +31,7 @@ use crate::cmatrix::{c, C};
 use crate::transfer::{mueller_from_jones, solve_stack_periodic, ExitSpec, Geometry, LayerSpec,
                      Method, PowerMethod, SolveResult};
 use crate::rotations;
+use crate::roughness;
 
 /// Read a 3x3 complex tensor from a flat (re,im)-pair slice at `off`.
 #[inline]
@@ -1295,4 +1296,159 @@ pub fn rot_quaternion_py(
 ) -> PyResult<Vec<f64>> {
     let r = rotations::quaternion(w, x, y, z);
     rot_apply(&r, t_re.as_slice()?, t_im.as_slice()?)
+}
+
+// ── construction kernels (architecture review: Python keeps marshalling only) ─
+
+fn tensor_to_interleaved(t: &Tensor3) -> Vec<f64> {
+    let mut flat = vec![0.0; 18];
+    for i in 0..3 {
+        for j in 0..3 {
+            flat[(i * 3 + j) * 2] = t[i][j].re;
+            flat[(i * 3 + j) * 2 + 1] = t[i][j].im;
+        }
+    }
+    flat
+}
+
+fn read_flat_tensor(re: &[f64], im: &[f64]) -> PyResult<Tensor3> {
+    if re.len() != 9 || im.len() != 9 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "tensor re/im must each have length 9 (row-major 3x3)",
+        ));
+    }
+    let mut t = [[c(0.0, 0.0); 3]; 3];
+    for i in 0..3 {
+        for j in 0..3 {
+            t[i][j] = c(re[i * 3 + j], im[i * 3 + j]);
+        }
+    }
+    Ok(t)
+}
+
+/// Route-2 graded-tensor kernel (Gaussian CDF profile + volume-weighted
+/// mixing). Returns n_sublayers interleaved-18 tensors, or None for the
+/// Python-side "no roughness -> no sublayers" contract (sigma <= 0 is a
+/// Python semantic: empty list, not an error).
+#[pyfunction]
+#[pyo3(name = "grade_interface_tensors")]
+#[pyo3(signature = (a_re, a_im, b_re, b_im, sigma_nm, n_sublayers, total_width_nm))]
+pub fn grade_interface_tensors(
+    _py: Python<'_>,
+    a_re: PyReadonlyArray1<f64>,
+    a_im: PyReadonlyArray1<f64>,
+    b_re: PyReadonlyArray1<f64>,
+    b_im: PyReadonlyArray1<f64>,
+    sigma_nm: f64,
+    n_sublayers: usize,
+    total_width_nm: Option<f64>,
+) -> PyResult<Option<Vec<f64>>> {
+    let ea = read_flat_tensor(a_re.as_slice()?, a_im.as_slice()?)?;
+    let eb = read_flat_tensor(b_re.as_slice()?, b_im.as_slice()?)?;
+    match roughness::graded_tensors(&ea, &eb, sigma_nm, n_sublayers, total_width_nm) {
+        Ok(ts) => {
+            let mut out = Vec::with_capacity(ts.len() * 18);
+            for t in &ts {
+                out.extend(tensor_to_interleaved(t));
+            }
+            Ok(Some(out))
+        }
+        Err(e) => Err(pyo3::exceptions::PyValueError::new_err(e)),
+    }
+}
+
+/// Twist-schedule kernel (grid: 0 = midpoint, 1 = endpoint).
+#[pyfunction]
+#[pyo3(name = "twisted_tensors")]
+#[pyo3(signature = (e_re, e_im, twist_rad, n_slices, grid_code))]
+pub fn twisted_tensors(
+    _py: Python<'_>,
+    e_re: PyReadonlyArray1<f64>,
+    e_im: PyReadonlyArray1<f64>,
+    twist_rad: f64,
+    n_slices: usize,
+    grid_code: i32,
+) -> PyResult<Option<Vec<f64>>> {
+    let e0 = read_flat_tensor(e_re.as_slice()?, e_im.as_slice()?)?;
+    let grid = match grid_code {
+        0 => rotations::TwistGrid::Midpoint,
+        1 => rotations::TwistGrid::Endpoint,
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "grid_code must be 0 (midpoint) or 1 (endpoint)",
+            ))
+        }
+    };
+    match rotations::twisted_tensors(&e0, twist_rad, n_slices, grid) {
+        Ok(ts) => {
+            let mut out = Vec::with_capacity(ts.len() * 18);
+            for t in &ts {
+                out.extend(tensor_to_interleaved(t));
+            }
+            Ok(Some(out))
+        }
+        Err(e) => Err(pyo3::exceptions::PyValueError::new_err(e)),
+    }
+}
+
+/// The Pasteur–Tellegen mapping (eps, rho, rhop, mu), each flat interleaved-18.
+#[pyfunction]
+#[pyo3(name = "pasteur_tensors")]
+pub fn pasteur_tensors(
+    _py: Python<'_>,
+    n: f64,
+    kappa: f64,
+    mu: f64,
+) -> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>)> {
+    let [eps, rho, rhop, mu_t] = crate::berreman::pasteur_tensors(n, kappa, mu)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    Ok((
+        tensor_to_interleaved(&eps),
+        tensor_to_interleaved(&rho),
+        tensor_to_interleaved(&rhop),
+        tensor_to_interleaved(&mu_t),
+    ))
+}
+
+/// Batched user-matrix apply R·ε·Rᵀ over n tensors (real 3x3 R). Used by
+/// evaluate_tensor(rotate=...) so the tensor contraction stays in Rust.
+#[pyfunction]
+#[pyo3(name = "rot_apply_matrix")]
+pub fn rot_apply_matrix(
+    _py: Python<'_>,
+    r_re: PyReadonlyArray1<f64>,
+    r_im: PyReadonlyArray1<f64>,
+    t_re: PyReadonlyArray1<f64>,
+    t_im: PyReadonlyArray1<f64>,
+) -> PyResult<(Vec<f64>, Vec<f64>)> {
+    let rr = read_flat_tensor(r_re.as_slice()?, r_im.as_slice()?)?;
+    let r = [[rr[0][0].re, rr[0][1].re, rr[0][2].re],
+             [rr[1][0].re, rr[1][1].re, rr[1][2].re],
+             [rr[2][0].re, rr[2][1].re, rr[2][2].re]];
+    let tre = t_re.as_slice()?;
+    let tim = t_im.as_slice()?;
+    if tre.len() != tim.len() || tre.len() % 9 != 0 || tre.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "tensor re/im must each have length 9*n (n >= 1), got {} / {}",
+            tre.len(),
+            tim.len()
+        )));
+    }
+    let n = tre.len() / 9;
+    let mut ts = Vec::with_capacity(n);
+    for w in 0..n {
+        ts.push(read_flat_tensor(&tre[w * 9..(w + 1) * 9], &tim[w * 9..(w + 1) * 9])?);
+    }
+    let out = rotations::apply_rot_batch(&r, &ts);
+    let mut ore = Vec::with_capacity(n * 9);
+    let mut oim = Vec::with_capacity(n * 9);
+    for t in &out {
+        for i in 0..3 {
+            for j in 0..3 {
+                ore.push(t[i][j].re);
+                oim.push(t[i][j].im);
+            }
+        }
+    }
+    Ok((ore, oim))
 }

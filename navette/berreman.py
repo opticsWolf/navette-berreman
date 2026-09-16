@@ -27,7 +27,6 @@ Conventions (faithful to pyllama)
 """
 from __future__ import annotations
 
-import math
 import warnings
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Union
@@ -49,6 +48,10 @@ try:
         polarizance as _rs_pol,
         circular_dichroism as _rs_cd,
         cloude as _rs_cloude,
+        grade_interface_tensors as _rs_grade_tensors,
+        twisted_tensors as _rs_twisted_tensors,
+        pasteur_tensors as _rs_pasteur_tensors,
+        rot_apply_matrix as _rs_rot_apply_matrix,
     )
 except ImportError:  # pragma: no cover - allow flat-module import too
     from _berreman import (
@@ -65,10 +68,24 @@ except ImportError:  # pragma: no cover - allow flat-module import too
         polarizance as _rs_pol,
         circular_dichroism as _rs_cd,
         cloude as _rs_cloude,
+        grade_interface_tensors as _rs_grade_tensors,
+        twisted_tensors as _rs_twisted_tensors,
+        pasteur_tensors as _rs_pasteur_tensors,
+        rot_apply_matrix as _rs_rot_apply_matrix,
     )
 
 _METHOD = {"scattering": 0, "sm": 0, "transfer": 1, "tm": 1,
            "exponential": 2, "em": 2, "exp": 2}
+
+
+def _lookup_method(name: str) -> int:
+    """Method-name lookup with a ValueError (not a bare KeyError) on typos."""
+    try:
+        return _METHOD[name.lower()]
+    except (KeyError, AttributeError):
+        raise ValueError(
+            f"unknown method {name!r}; valid: "
+            "'scattering'/'sm', 'transfer'/'tm', 'exponential'/'em'/'exp'") from None
 
 
 @dataclass
@@ -150,7 +167,7 @@ class BerremanStack:
         self.theta = ang if angles_in_radians else np.radians(ang)
         self.n_wl = self.wl.size
         self.n_theta = self.theta.size
-        self.method = _METHOD[method.lower()]
+        self.method = _lookup_method(method)
         self.n_entry = self._broadcast_index(n_entry)
         self.n_exit = self._broadcast_index(n_exit)
         self.exit_roughness = exit_roughness
@@ -340,7 +357,7 @@ class BerremanStack:
                 "meaning); expand rough interfaces into graded sublayers with "
                 "graded_stack()/grade_interface() first")
         if isinstance(method, str):
-            m = self._METHOD[method.lower()]
+            m = _lookup_method(method)
         elif method is None:
             m = self.method
         else:
@@ -523,22 +540,29 @@ def chiral_layer(n, kappa, thickness_nm, mu=1.0):
     non-dispersive; use ``kappa_table`` + Phase-9 Table models for
     dispersive backgrounds. Warns for ``|κ| ≥ 0.2n`` (natural-media regime;
     chiral nihility κ → n makes det = n²−κ² singular → NaN/n_failed).
+
+    The tensor mapping itself lives in Rust (``berreman::pasteur_tensors``,
+    shared with the Task-0 convention tests — single source of truth); this
+    wrapper only validates the warning regime and materializes the Layer.
     """
     n = float(n)
     kappa = float(kappa)
+    mu = float(mu)
     if not (np.isfinite(n) and n > 0):
         raise ValueError(f"chiral_layer: n must be finite and > 0, got {n}")
-    if not np.isfinite(kappa):
-        raise ValueError(f"chiral_layer: kappa must be finite, got {kappa}")
-    if abs(kappa) >= 0.2 * n:
+    if abs(kappa) >= 0.2 * n and np.isfinite(kappa):
         warnings.warn(
             f"chiral_layer: |kappa|={abs(kappa):.4g} >= 0.2*n ({0.2*n:.4g}); "
             "outside the natural-media regime, det = n^2-k^2 nears singular",
             stacklevel=2)
-    eye = np.eye(3, dtype=complex)
-    return Layer(eps=(n ** 2) * eye, thickness_nm=float(thickness_nm),
-                 rho=-1j * kappa * eye, rhop=+1j * kappa * eye,
-                 mu=float(mu) * eye)
+    eps18, rho18, rhop18, mu18 = _rs_pasteur_tensors(n, kappa, mu)
+
+    def to_t(flat):
+        pair = np.asarray(flat, dtype=float).reshape(9, 2)
+        return pair[:, 0].reshape(3, 3) + 1j * pair[:, 1].reshape(3, 3)
+
+    return Layer(eps=to_t(eps18), thickness_nm=float(thickness_nm),
+                 rho=to_t(rho18), rhop=to_t(rhop18), mu=to_t(mu18))
 
 
 def kappa_table(wavelengths_nm, kappas):
@@ -582,15 +606,15 @@ def twisted_stack(eps_uniaxial, total_nm, twist_rad, n_slices, grid="midpoint"):
         raise ValueError("twisted_stack: n_slices >= 1")
     if grid not in ("midpoint", "endpoint"):
         raise ValueError(f"twisted_stack: grid must be 'midpoint' or 'endpoint', got {grid!r}")
+    # Schedule + per-slice rotation live in Rust (rotations::twisted_tensors;
+    # same rot_z code path the old Python loop used — bit-identical output).
+    grid_code = 0 if grid == "midpoint" else 1
+    flat = _rs_twisted_tensors(e0.real.reshape(9).copy(), e0.imag.reshape(9).copy(),
+                               float(twist_rad), n_slices, grid_code)
+    pair = np.asarray(flat, dtype=float).reshape(-1, 9, 2)
     dz = float(total_nm) / n_slices
-    out = []
-    for k in range(n_slices):
-        if grid == "midpoint":
-            frac = (k + 0.5) / n_slices
-        else:
-            frac = k / max(n_slices - 1, 1)
-        out.append(Layer(rot_z(e0, twist_rad * frac), dz))
-    return out
+    return [Layer(p[:, 0].reshape(3, 3) + 1j * p[:, 1].reshape(3, 3), dz)
+            for p in pair]
 
 
 def cholesteric_stack(n_o, n_e, pitch_nm, n_periods, n_per_pitch=48,
@@ -673,19 +697,19 @@ def grade_interface(eps_a, eps_b, sigma_nm: float, n_sublayers: int = 7,
         raise ValueError("grade_interface needs scalar/(3,)/(3,3) eps; dispersive "
                          "(n_wl,3,3) + roughness is unsupported — build sublayers "
                          "per wavelength instead") from None
-    width = float(6.0 * sigma_nm if total_width_nm is None else total_width_nm)
-    dz = width / n_sublayers
-    root2_sigma = sigma_nm * math.sqrt(2.0)
-    subs: List[Layer] = []
-    for k in range(n_sublayers):
-        z = -0.5 * width + (k + 0.5) * dz
-        f = 0.5 * (1.0 + math.erf(z / root2_sigma))
-        if mixing == "linear":
-            eps_eff = (1.0 - f) * ea + f * eb
-        else:
-            raise ValueError("unknown mixing '%s' (only 'linear')" % mixing)
-        subs.append(Layer(eps_eff, dz))
-    return subs
+    if mixing != "linear":
+        raise ValueError("unknown mixing '%s' (only 'linear')" % mixing)
+    # Gaussian-CDF profile + volume-weighted tensor mixing live in Rust
+    # (roughness::graded_tensors); the wrapper materializes Layers.
+    flat = _rs_grade_tensors(ea.real.reshape(9).copy(), ea.imag.reshape(9).copy(),
+                             eb.real.reshape(9).copy(), eb.imag.reshape(9).copy(),
+                             float(sigma_nm), int(n_sublayers),
+                             None if total_width_nm is None else float(total_width_nm))
+    pair = np.asarray(flat, dtype=float).reshape(-1, 9, 2)
+    return [Layer(p[:, 0].reshape(3, 3) + 1j * p[:, 1].reshape(3, 3),
+                  float(total_width_nm if total_width_nm is not None
+                        else 6.0 * sigma_nm) / n_sublayers)
+            for p in pair]
 
 
 def graded_stack(layers: Sequence["Layer"], interface_sigma_nm: Sequence[float],

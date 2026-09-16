@@ -461,6 +461,45 @@ pub fn zero_tensor() -> Tensor3 {
     zero3()
 }
 
+/// Pasteur–Tellegen isotropic chiral medium (THE Phase-10a mapping, single
+/// source of truth — the Python `chiral_layer` helper and the Task-0 tests
+/// both call this).
+///
+/// SI definition (e^{-iωt}): D = εE + iξH, B = −iξE + μH, ξ = κ/c₀ (κ
+/// dimensionless). Code units carry impedance-scaled H (h = Z₀H ⇒ D̃ = εE +
+/// iκh, B̃ = μh − iκE, since c₀ε₀Z₀ = 1, c₀μ₀ = Z₀) — and the engine's
+/// (rho, rhop) slots couple with OPPOSITE sign to that derivation (as if
+/// e^{+iωt}; achiral observables can't pin this, chiral ones do — see the
+/// TIME_CONVENTION record on the Task-0 tests below). The RECORDED mapping
+/// is therefore rho = −iκI₃, rhop = +iκI₃, with eigen-indices n ± κ and
+/// n + κ on the frozen channel-0 = RCP basis.
+///
+/// Regime: det = n²−κ² may reach ZERO — that case must FLOW THROUGH to the
+/// solver's honest-NaN path (None → NaN + n_failed; pinned by G15a — do not
+/// pre-empt it here, it is the regression gate for the §10.8 NaN backstops).
+/// The natural-media guard |κ| ≥ 0.2n is a WARNING at the Python layer.
+/// Hard errors here are pure input validity: non-finite, n ≤ 0, μ ≤ 0.
+pub fn pasteur_tensors(n: f64, kappa: f64, mu: f64) -> Result<[Tensor3; 4], String> {
+    if !n.is_finite() || n <= 0.0 {
+        return Err(format!("n must be finite and > 0, got {n}"));
+    }
+    if !kappa.is_finite() {
+        return Err(format!("kappa must be finite, got {kappa}"));
+    }
+    if !mu.is_finite() || mu <= 0.0 {
+        return Err(format!("mu must be finite and > 0, got {mu}"));
+    }
+    let n2 = c(n * n, 0.0);
+    let ik = c(0.0, kappa);
+    let mu_t = diag_eps(c(mu, 0.0), c(mu, 0.0), c(mu, 0.0));
+    Ok([
+        diag_eps(n2, n2, n2),          // eps = n² I
+        diag_eps(-ik, -ik, -ik),       // rho  = -iκ I
+        diag_eps(ik, ik, ik),          // rhop = +iκ I
+        mu_t,                          // mu   = μ I
+    ])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -487,9 +526,12 @@ mod tests {
         let eps = diag_eps(e, e, e);
         let mu = identity_tensor();
         for &kappa in &[0.01_f64, 0.1_f64] {
-            let ik = c(0.0, kappa);
-            let rho = diag_eps(-ik, -ik, -ik);
-            let rhop = diag_eps(ik, ik, ik);
+            // exercised through the SHIPPED mapping helper (single source of
+            // truth for the convention, shared with Python chiral_layer)
+            let [eps_p, rho, rhop, mu_p] =
+                pasteur_tensors(n, kappa, 1.0).expect("pasteur");
+            assert_eq!(eps_p, eps);
+            assert_eq!(mu_p, mu);
             let d = berreman_full(&eps, &rho, &rhop, &mu, 0.0);
             let (vals, vecs) = eig4(&d);
             let mut got: Vec<f64> = vals.iter().map(|v| v.re).collect();
@@ -543,9 +585,10 @@ mod tests {
         let eps = diag_eps(e, e, e);
         let mu = identity_tensor();
         for &kappa in &[0.01_f64, 0.1_f64] {
-            let ik = c(0.0, kappa);
-            let rho = diag_eps(-ik, -ik, -ik);
-            let rhop = diag_eps(ik, ik, ik);
+            let [eps_p, rho, rhop, mu_p] =
+                pasteur_tensors(n, kappa, 1.0).expect("pasteur");
+            assert_eq!(eps_p, eps);
+            assert_eq!(mu_p, mu);
             let d = berreman_full(&eps, &rho, &rhop, &mu, kx);
             let (vals, vecs) = eig4(&d);
             let mut idx: Vec<usize> = (0..4).collect();
@@ -656,5 +699,50 @@ mod tests {
             }
         }
         assert!(worst < 1e-12, "full vs simple worst = {worst:e}");
+    }
+}
+
+#[cfg(test)]
+mod pasteur_helper_tests {
+    use super::*;
+
+    /// The shipped mapping: values, reciprocity rho = −rhopᵀ, regime guards.
+    #[test]
+    fn pasteur_tensors_mapping_and_guards() {
+        let [eps, rho, rhop, mu] = pasteur_tensors(1.5, 0.05, 1.0).expect("pasteur");
+        for i in 0..3 {
+            assert_eq!(eps[i][i], c(2.25, 0.0));
+            assert_eq!(rho[i][i], c(0.0, -0.05));
+            assert_eq!(rhop[i][i], c(0.0, 0.05));
+            assert_eq!(mu[i][i], c(1.0, 0.0));
+            for j in 0..3 {
+                if i != j {
+                    assert_eq!(rho[i][j], c(0.0, 0.0));
+                    assert_eq!(rhop[i][j], c(0.0, 0.0));
+                }
+            }
+        }
+        // reciprocal pair: rho = -rhop^T (exact: both diagonal)
+        for i in 0..3 {
+            for j in 0..3 {
+                assert_eq!(rho[i][j], c(-rhop[j][i].re, -rhop[j][i].im));
+            }
+        }
+        // mu != 1 propagates
+        let [.., mu2] = pasteur_tensors(1.5, 0.05, 1.2).expect("pasteur");
+        assert_eq!(mu2[0][0], c(1.2, 0.0));
+        // guards: invalid inputs must Err, not panic (core contract).
+        // NOTE: |kappa| >= n is deliberately NOT an error — det-singular
+        // media flow through to the solver's honest-NaN path (G15a pins it).
+        assert!(pasteur_tensors(0.0, 0.05, 1.0).is_err());
+        assert!(pasteur_tensors(-1.5, 0.05, 1.0).is_err());
+        assert!(pasteur_tensors(f64::NAN, 0.05, 1.0).is_err());
+        assert!(pasteur_tensors(1.5, f64::NAN, 1.0).is_err());
+        assert!(pasteur_tensors(1.5, 0.05, 0.0).is_err());
+        assert!(pasteur_tensors(1.5, 0.05, -1.0).is_err());
+        assert!(pasteur_tensors(1.5, 0.05, f64::INFINITY).is_err());
+        // nihility boundary builds fine (solver flags the singular det)
+        assert!(pasteur_tensors(1.5, 1.5, 1.0).is_ok());
+        assert!(pasteur_tensors(1.5, 1.6, 1.0).is_ok());
     }
 }

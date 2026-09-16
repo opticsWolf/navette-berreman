@@ -62,5 +62,9 @@ fn _berreman(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pybind::rot_axis_angle_py, m)?)?;
     m.add_function(wrap_pyfunction!(pybind::rot_euler_py, m)?)?;
     m.add_function(wrap_pyfunction!(pybind::rot_quaternion_py, m)?)?;
+    m.add_function(wrap_pyfunction!(pybind::grade_interface_tensors, m)?)?;
+    m.add_function(wrap_pyfunction!(pybind::twisted_tensors, m)?)?;
+    m.add_function(wrap_pyfunction!(pybind::pasteur_tensors, m)?)?;
+    m.add_function(wrap_pyfunction!(pybind::rot_apply_matrix, m)?)?;
     Ok(())
 }

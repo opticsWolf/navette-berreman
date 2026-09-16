@@ -131,6 +131,52 @@ pub fn apply_rot(r: &Mat3R, eps: &Tensor3) -> Tensor3 {
     out
 }
 
+/// Batched apply (one R over n tensors) — used by evaluate_tensor's
+/// per-wavelength orientation and by the twist kernel below.
+pub fn apply_rot_batch(r: &Mat3R, eps: &[Tensor3]) -> Vec<Tensor3> {
+    eps.iter().map(|t| apply_rot(r, t)).collect()
+}
+
+/// Twist-grid sampling schedule (mirrors B44 InhomogeneousLayer).
+/// Midpoint = the B44 default sampling (tensor evaluated at slice midpoints
+/// `(k+½)·d/div` even though getSlices returns endpoint edges); endpoint =
+/// explicit edge-matched grid `frac = k/(n−1)`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TwistGrid {
+    Midpoint,
+    Endpoint,
+}
+
+/// Twist-schedule kernel (B44 `TwistedMaterial` / pyllama cholesteric):
+/// slice k of `n_slices` carries `axis_angle(z, twist_rad · frac) · eps · (…)
+/// ᵀ` with `frac = (k+½)/n` (Midpoint) or `frac = k/max(n−1,1)` (Endpoint).
+/// Identical math to the former Python loop (same `rot_z` code path), now
+/// shipped from Rust; the Python helper marshals the output into Layers.
+pub fn twisted_tensors(
+    eps: &Tensor3,
+    twist_rad: f64,
+    n_slices: usize,
+    grid: TwistGrid,
+) -> Result<Vec<Tensor3>, String> {
+    if n_slices == 0 {
+        return Err("n_slices must be >= 1".to_string());
+    }
+    if !twist_rad.is_finite() {
+        return Err(format!("twist_rad must be finite, got {twist_rad}"));
+    }
+    let out: Vec<Tensor3> = (0..n_slices)
+        .map(|k| {
+            let frac = match grid {
+                TwistGrid::Midpoint => (k as f64 + 0.5) / n_slices as f64,
+                TwistGrid::Endpoint => k as f64 / (n_slices.max(2) - 1) as f64,
+            };
+            let r = axis_angle([0.0, 0.0, 1.0], twist_rad * frac);
+            apply_rot(&r, eps)
+        })
+        .collect();
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -181,6 +227,71 @@ mod tests {
             for i in 0..3 {
                 for j in 0..3 {
                     assert!((r[i][j] - id[i][j]).abs() == 0.0);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod twist_tests {
+    use super::*;
+
+    fn diag(v: f64) -> Tensor3 {
+        [[c(v, 0.0), c(0.0, 0.0), c(0.0, 0.0)],
+         [c(0.0, 0.0), c(v, 0.0), c(0.0, 0.0)],
+         [c(0.0, 0.0), c(0.0, 0.0), c(v, 0.0)]]
+    }
+
+    /// Schedule fractions + equivalence with the direct per-slice rot path.
+    #[test]
+    fn twisted_schedule_matches_rot_path() {
+        let e0 = [[c(2.89, 0.0), c(0.0, 0.0), c(0.0, 0.0)],
+                  [c(0.0, 0.0), c(2.25, 0.0), c(0.0, 0.0)],
+                  [c(0.0, 0.0), c(0.0, 0.0), c(2.25, 0.0)]];
+        let twist = 2.0 * std::f64::consts::PI * 5.0;
+        let g = twisted_tensors(&e0, twist, 240, TwistGrid::Midpoint)
+            .expect("twisted");
+        assert_eq!(g.len(), 240);
+        // slice k must equal apply_rot(axis_z, twist*(k+1/2)/n) directly
+        for k in [0usize, 7, 119, 239] {
+            let frac = (k as f64 + 0.5) / 240.0;
+            let want = apply_rot(&axis_angle([0.0, 0.0, 1.0], twist * frac), &e0);
+            for i in 0..3 {
+                for j in 0..3 {
+                    assert_eq!(g[k][i][j], want[i][j], "slice {k} mismatch");
+                }
+            }
+        }
+        // z-rot keeps εzz and the in-plane block structure
+        assert_eq!(g[0][2][2], e0[2][2]);
+        assert_eq!(g[0][0][2], c(0.0, 0.0));
+        // endpoint grid: frac = k/(n-1), first slice unrotated, last == full twist
+        let ge = twisted_tensors(&e0, 0.7, 5, TwistGrid::Endpoint).expect("twisted");
+        assert_eq!(ge[0][0][0], e0[0][0]);
+        let last = apply_rot(&axis_angle([0.0, 0.0, 1.0], 0.7), &e0);
+        for i in 0..3 {
+            for j in 0..3 {
+                assert_eq!(ge[4][i][j], last[i][j]);
+            }
+        }
+        // n=1: single unrotated slice (0/max(1,1) guard)
+        let g1 = twisted_tensors(&e0, 0.7, 1, TwistGrid::Endpoint).expect("twisted");
+        assert_eq!(g1[0][0][0], e0[0][0]);
+        // midpoint n=1: frac = 1/2 (half the twist)
+        let g1m = twisted_tensors(&e0, 0.7, 1, TwistGrid::Midpoint).expect("twisted");
+        let half = apply_rot(&axis_angle([0.0, 0.0, 1.0], 0.35), &e0);
+        assert_eq!(g1m[0][1][0], half[1][0]);
+        // validation
+        assert!(twisted_tensors(&e0, 0.7, 0, TwistGrid::Midpoint).is_err());
+        assert!(twisted_tensors(&e0, f64::NAN, 5, TwistGrid::Midpoint).is_err());
+        // batch helper agrees slice-by-slice
+        let b = apply_rot_batch(&axis_angle([0.0, 0.0, 1.0], 0.3), &g[..3]);
+        for k in 0..3 {
+            let want = apply_rot(&axis_angle([0.0, 0.0, 1.0], 0.3), &g[k]);
+            for i in 0..3 {
+                for j in 0..3 {
+                    assert_eq!(b[k][i][j], want[i][j]);
                 }
             }
         }

@@ -49,6 +49,7 @@ try:
         materials_ema_bruggeman as _mk_bru,
         materials_ema_roughness as _mk_rough,
         materials_eps_to_nk as _mk_eps_to_nk,
+        rot_apply_matrix as _rs_rot_apply_matrix,
     )
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
@@ -276,10 +277,10 @@ def evaluate_tensor(spec, wavelength_nm, rotate: Optional[np.ndarray] = None) ->
     ``bl.Layer`` / ``graded_stack`` (which accept ``(n_wl,3,3)``). EMA
     composites stay scalar per axis (per-axis mixing is the defined
     semantic); ``Roughness(bottom, top)`` maps to the 50:50 Looyenga
-    ``roughness_interface`` per axis. Orientation is applied downstream
-    (pass ``rotate`` as a 3×3 matrix for ``R eps Rᵀ`` per wavelength, or
-    rotate afterwards with the existing ``rot`` helpers / Phase-6
-    ``rotations.rs``); materials never rotate internally.
+    ``roughness_interface`` per axis. Orientation is applied downstream:
+    pass ``rotate`` as a REAL 3×3 orientation matrix for ``R·ε·Rᵀ`` per
+    wavelength (applied in Rust via ``apply_rot_batch``), or rotate
+    afterwards with the ``rot`` helpers; materials never rotate internally.
     """
     wl = np.ascontiguousarray(np.asarray(wavelength_nm, dtype=np.float64))
     if isinstance(spec, MaterialSpec) or (isinstance(spec, Mapping) and "model" in spec):
@@ -312,9 +313,21 @@ def evaluate_tensor(spec, wavelength_nm, rotate: Optional[np.ndarray] = None) ->
             "{'biaxial': {'x':.., 'y':.., 'z':..}}"
         )
     if rotate is not None:
-        r = np.asarray(rotate, dtype=np.complex128)
+        # R·ε·Rᵀ per wavelength — delegated to Rust (rotations::apply_rot_batch
+        # via rot_apply_matrix) so the tensor contraction stays out of Python.
+        r = np.asarray(rotate)
         if r.shape != (3, 3):
             raise ValueError(f"rotate must be (3,3), got {r.shape}")
-        # Same convention as berreman.rot_z: R eps Rᵀ (no conjugation).
-        out = np.einsum("ab,wbc,dc->wad", r, out, r)
+        if np.any(np.asarray(r, dtype=complex).imag != 0):
+            raise ValueError(
+                "rotate must be a REAL 3x3 orientation matrix "
+                "(R·ε·Rᵀ; the wrapper applies it in Rust, which is real-only)")
+        r = np.ascontiguousarray(r, dtype=np.float64)
+        n = wl.size
+        tre = np.ascontiguousarray(out.real.reshape(n * 9))
+        tim = np.ascontiguousarray(out.imag.reshape(n * 9))
+        ore, oim = _rs_rot_apply_matrix(
+            r.reshape(9).copy(), np.zeros(9), tre, tim)
+        out = (np.asarray(ore, dtype=float).reshape(n, 3, 3)
+               + 1j * np.asarray(oim, dtype=float).reshape(n, 3, 3))
     return out
