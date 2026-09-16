@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 //! PyO3 bindings for the Berreman/Mueller solver, styled after `_smatrix`:
 //! pure-Rust `*_inner` physics in `transfer`/`berreman`/`cmatrix`, thin
 //! `#[pyfunction]` wrappers here, and a Rayon-parallel sweep over the

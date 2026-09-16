@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 //! navette-berreman — a Rust port of the 4x4 Berreman/Mueller optical solver for
 //! birefringent multilayer systems, styled after the `_smatrix` crate.
 //!

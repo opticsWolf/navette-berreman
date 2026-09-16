@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 //! Mueller-matrix post-processing (depolarization / polarimetry metrics).
 //!
 //! Scalar 4x4 real algebra over f64. Conventions transcribed from BerreMueller

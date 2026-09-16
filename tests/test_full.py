@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # ref_pyllama.py
 # NOTE: requires full_berreman.py importable (set FULL_BERREMAN_DIR or place beside this file)

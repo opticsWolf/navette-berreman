@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # NOTE: G7b needs the live Berreman4x4 sources: B44_DIR points at the checkout

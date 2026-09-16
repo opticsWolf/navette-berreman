@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 """Gate G13a: specular energy conservation for Route-1 roughness.
 
 Self-contained physical invariant (no smatrix needed). This is the test that

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 """Gates G14a-c: materials (needs upstream `navette.materials` for G14a).
 
 G14a: live parity vs upstream evaluate on every MODELS entry x 200-pt grid.

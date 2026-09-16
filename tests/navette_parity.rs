@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 //! Rust-level parity vs the upstream `navette` crate (crates.io, 0.7.0).
 //! Python-level companion: tests/test_roughness.py (G5), tests/test_graded.py.
 //!

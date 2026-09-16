@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 """navette.berreman_materials — dispersion models over the Rust core (upstream kernels).
 
 NOTE: named ``berreman_materials`` (not ``materials``) because the upstream

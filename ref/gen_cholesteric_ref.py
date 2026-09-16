@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 """Generate ref/ref_out_cholesteric.json: live-B44 circular Bragg reference (G15d).
 
 Fixture (mirrors tests/test_cholesteric.py G15d):

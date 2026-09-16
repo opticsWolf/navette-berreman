@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 //! Stack assembly: transfer-matrix and scattering-matrix methods, Fresnel
 //! coefficient extraction, reflectance/transmittance, the linear→circular
 //! Jones conversion, and the Jones→Mueller map. Ports of the corresponding

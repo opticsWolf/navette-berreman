@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 //! Surface-roughness models for the 4×4 interface scattering matrix.
 //!
 //! Route 1 (specular / coherent attenuation) — a direct generalization of the

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 """Gates G13b-d: Route-2 (graded_stack) coverage, no smatrix needed.
 
 G13b sigma=0 identity, G13c scattering-vs-transfer agreement, G13d sublayer

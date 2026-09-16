@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 // Validation harness: solves the same canonical stacks as ref/ref_pyllama.py
 // with both methods and prints JSON to stdout for a tolerance diff.
 

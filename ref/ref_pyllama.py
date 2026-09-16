@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 """Minimal, faithful NumPy reference for the pyllama 4x4 Berreman solver.
 
 Transcribed directly from the uploaded pyllama.py (Layer with the reduced

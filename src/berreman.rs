@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 //! Berreman 4x4 layer optics: matrix construction, partial waves, and the
 //! eigenmode sort. This is a faithful Rust port of `pyllama.Layer` /
 //! `HalfSpace` plus `full_berreman.calc_berreman_matrix`.

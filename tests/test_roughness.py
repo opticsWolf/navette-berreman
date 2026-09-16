@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # ref_pyllama.py
 # NOTE: requires the smatrix extension (_smatrix.so + smatrix.py) importable.

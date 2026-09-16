@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 //! Fixed-size complex linear algebra for the 4x4 Berreman problem.
 //!
 //! Everything here is pure Rust over `num_complex::Complex64` so it can be

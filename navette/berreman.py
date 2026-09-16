@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 """navette.berreman — a clean Python interface to the ``_berreman`` Rust extension.
 
 A thin, self-contained wrapper around the compiled Rust Berreman/Mueller core.

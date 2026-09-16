@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 """Gate G15: chiral media (Phase 10, Pasteur-Tellegen primary).
 
 Task-0 spectrum/handedness pins live in Rust

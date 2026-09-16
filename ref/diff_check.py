@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 """Compare ref/rust_out.json against ref/ref_out.json with a tolerance.
 
 Jones matrices are compared up to a global sign/phase per matrix (physically

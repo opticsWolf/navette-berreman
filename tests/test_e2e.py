@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # ref_pyllama.py
 """End-to-end check of the compiled extension + wrapper against ref_pyllama."""
