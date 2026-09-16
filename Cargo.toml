@@ -1,0 +1,42 @@
+[package]
+name = "navette-berreman"
+version = "0.1.0"
+edition = "2021"
+license = "LGPL-3.0-or-later"
+
+[lib]
+name = "_berreman"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+num-complex = "0.4"
+# Upstream Navette engine (crates.io): dispersion kernels (materials) + smatrix
+# parity surface. Phase 9 decision: depend, don't port — all kernels incl. the
+# KK trio come from here; tensor assembly is ours (src/materials.rs).
+navette = "0.7"
+ndarray = "0.15"
+
+[dependencies.pyo3]
+version = "0.23"
+features = ["extension-module"]
+optional = true
+
+[dependencies.numpy]
+version = "0.23"
+optional = true
+
+[dependencies.rayon]
+version = "1"
+optional = true
+
+[features]
+default = []
+python = ["dep:pyo3", "dep:numpy", "dep:rayon"]
+
+# (navette moved to [dependencies] for Phase 9; parity pins in
+# tests/navette_parity.rs still serve as the re-audit tripwire on upgrade.)
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

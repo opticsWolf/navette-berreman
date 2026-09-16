@@ -1,0 +1,19 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "navette-berreman"
+version = "0.1.0"
+description = "4x4 Berreman / Mueller solver for birefringent multilayer systems"
+requires-python = ">=3.12"
+dependencies = ["numpy"]
+license = "LGPL-3.0-or-later"
+
+[tool.maturin]
+# Injects the compiled Rust extension into the "navette" namespace
+# under the name "_berreman"; the hand-written wrapper is navette/berreman.py.
+module-name = "navette._berreman"
+# The Rust extension is gated behind the `python` feature so the pure-Rust
+# core still builds/tests without PyO3 (`cargo test`); maturin always enables it.
+features = ["python"]
