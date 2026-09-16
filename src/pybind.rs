@@ -808,87 +808,127 @@ pub fn mueller_from_jones_py(
     Ok(PyArray::from_vec(py, flat).reshape([4, 4])?.into())
 }
 
-// ── Mueller suite (scalar flat-16 post-ops over M_refl/M_trans; None → NaN) ──
+// ── Mueller suite (batched flat-16 post-ops over M_refl/M_trans; invalid → NaN) ──
 
-fn read_m16(re: &[f64]) -> PyResult<[[f64; 4]; 4]> {
-    if re.len() != 16 {
+/// Decode n row-major 4x4 matrices from a flat 16*n slice (n = 0 allowed).
+fn read_m16_batch(re: &[f64]) -> PyResult<Vec<[[f64; 4]; 4]>> {
+    if re.len() % 16 != 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Mueller matrix must have 16 elements (row-major 4x4)",
+            "Mueller matrices must have 16*n elements (n row-major 4x4)",
         ));
     }
-    let mut m = [[0.0; 4]; 4];
-    for i in 0..4 {
-        for j in 0..4 {
-            m[i][j] = re[i * 4 + j];
+    let n = re.len() / 16;
+    let mut out = Vec::with_capacity(n);
+    for k in 0..n {
+        let mut m = [[0.0_f64; 4]; 4];
+        for i in 0..4 {
+            for j in 0..4 {
+                m[i][j] = re[k * 16 + i * 4 + j];
+            }
         }
+        out.push(m);
     }
-    Ok(m)
+    Ok(out)
 }
 
-/// Scalar depolarization index; NaN when M00 <= 0.
+/// Architecture review follow-up: these five were per-row scalar bindings
+/// looped over in Python (`_apply_m16`/`cloude` row loops). Same scalar math
+/// (`crate::mueller`, single source), now batched — one GIL release + Rayon
+/// pass over all rows. Python-visible module names unchanged.
+/// Depolarization index per row; NaN when M00 <= 0.
 #[pyfunction]
 #[pyo3(name = "depolarization_index")]
 pub fn depolarization_index_py(
-    _py: Python<'_>,
+    py: Python<'_>,
     m_flat: PyReadonlyArray1<f64>,
-) -> PyResult<f64> {
-    let m = read_m16(m_flat.as_slice()?)?;
-    Ok(crate::mueller::depolarization_index(&m).unwrap_or(f64::NAN))
+) -> PyResult<Vec<f64>> {
+    let ms = read_m16_batch(m_flat.as_slice()?)?;
+    Ok(py.detach(|| {
+        ms.par_iter()
+            .map(|m| crate::mueller::depolarization_index(m).unwrap_or(f64::NAN))
+            .collect()
+    }))
 }
 
-/// Scalar diattenuation (3,) / polarizance (3,) / CD — NaN triple/single.
+/// Diattenuation vector per row (flat 3n; NaN triple when M00 <= 0).
 #[pyfunction]
 #[pyo3(name = "diattenuation")]
 pub fn diattenuation_py(
-    _py: Python<'_>,
+    py: Python<'_>,
     m_flat: PyReadonlyArray1<f64>,
 ) -> PyResult<Vec<f64>> {
-    let m = read_m16(m_flat.as_slice()?)?;
-    Ok(crate::mueller::diattenuation(&m)
-        .map(|v| v.to_vec())
-        .unwrap_or(vec![f64::NAN; 3]))
+    let ms = read_m16_batch(m_flat.as_slice()?)?;
+    let mut out = vec![f64::NAN; ms.len() * 3];
+    py.detach(|| {
+        out.par_chunks_mut(3)
+            .zip(&ms)
+            .for_each(|(o, m)| {
+                if let Some(v) = crate::mueller::diattenuation(m) {
+                    o.copy_from_slice(&v);
+                }
+            });
+    });
+    Ok(out)
 }
 
+/// Polarizance vector per row (flat 3n; NaN triple when M00 <= 0).
 #[pyfunction]
 #[pyo3(name = "polarizance")]
 pub fn polarizance_py(
-    _py: Python<'_>,
+    py: Python<'_>,
     m_flat: PyReadonlyArray1<f64>,
 ) -> PyResult<Vec<f64>> {
-    let m = read_m16(m_flat.as_slice()?)?;
-    Ok(crate::mueller::polarizance(&m)
-        .map(|v| v.to_vec())
-        .unwrap_or(vec![f64::NAN; 3]))
+    let ms = read_m16_batch(m_flat.as_slice()?)?;
+    let mut out = vec![f64::NAN; ms.len() * 3];
+    py.detach(|| {
+        out.par_chunks_mut(3)
+            .zip(&ms)
+            .for_each(|(o, m)| {
+                if let Some(v) = crate::mueller::polarizance(m) {
+                    o.copy_from_slice(&v);
+                }
+            });
+    });
+    Ok(out)
 }
 
+/// Circular dichroism per row; NaN when M00 <= 0.
 #[pyfunction]
 #[pyo3(name = "circular_dichroism")]
 pub fn circular_dichroism_py(
-    _py: Python<'_>,
+    py: Python<'_>,
     m_flat: PyReadonlyArray1<f64>,
-) -> PyResult<f64> {
-    let m = read_m16(m_flat.as_slice()?)?;
-    Ok(crate::mueller::circular_dichroism(&m).unwrap_or(f64::NAN))
+) -> PyResult<Vec<f64>> {
+    let ms = read_m16_batch(m_flat.as_slice()?)?;
+    Ok(py.detach(|| {
+        ms.par_iter()
+            .map(|m| crate::mueller::circular_dichroism(m).unwrap_or(f64::NAN))
+            .collect()
+    }))
 }
 
-/// Cloude -> (lambda[4], entropy); NaNs when non-physical.
+/// Cloude -> flat (lambda 4n, entropy n); NaNs when non-physical.
 #[pyfunction]
 #[pyo3(name = "cloude")]
 pub fn cloude_py(
     py: Python<'_>,
     m_flat: PyReadonlyArray1<f64>,
-) -> PyResult<Py<PyAny>> {
-    // Return a (lambda, entropy) tuple; wrapper splits into dict entries.
-    let m = read_m16(m_flat.as_slice()?)?;
-    let (lam, s) = match crate::mueller::cloude(&m) {
-        Some(cc) => (cc.lambda.to_vec(), cc.entropy),
-        None => (vec![f64::NAN; 4], f64::NAN),
-    };
-    use pyo3::types::PyTuple;
-    Ok(
-        PyTuple::new(py, [lam.into_pyobject(py)?.into_any(), s.into_pyobject(py)?.into_any()])?
-            .into(),
-    )
+) -> PyResult<(Vec<f64>, Vec<f64>)> {
+    let ms = read_m16_batch(m_flat.as_slice()?)?;
+    let outs: Vec<Option<([f64; 4], f64)>> = py.detach(|| {
+        ms.par_iter()
+            .map(|m| crate::mueller::cloude(m).map(|cc| (cc.lambda, cc.entropy)))
+            .collect()
+    });
+    let mut lam = vec![f64::NAN; ms.len() * 4];
+    let mut ent = vec![f64::NAN; ms.len()];
+    for (k, o) in outs.iter().enumerate() {
+        if let Some((l, s)) = o {
+            lam[k * 4..k * 4 + 4].copy_from_slice(l);
+            ent[k] = *s;
+        }
+    }
+    Ok((lam, ent))
 }
 
 // ── materials (thin adapters over crate::materials; errors → ValueError) ──

@@ -234,32 +234,33 @@ class BerremanStack:
         return self._tensor_per_wl(np.asarray(t, dtype=complex), name)
 
     def _flatten_opt(self, per_wl) -> np.ndarray:
-        """Flatten an (n_wl,3,3) exit tensor field to [n_wl*18] (re,im) pairs."""
-        out = np.empty(self.n_wl * 18, dtype=float)
-        for w in range(self.n_wl):
-            pair = np.empty(18, dtype=float)
-            pair[0::2] = per_wl[w].real.reshape(9)
-            pair[1::2] = per_wl[w].imag.reshape(9)
-            out[w * 18:(w + 1) * 18] = pair
-        return out
+        """Flatten an (n_wl,3,3) exit tensor field to [n_wl*18] (re,im) pairs.
+        Vectorized: interleave re/im once over all rows (same values as the
+        former per-wavelength loop — pure copies)."""
+        if per_wl is None:
+            return np.empty(0, dtype=float)
+        a = np.asarray(per_wl, dtype=complex)
+        n = a.shape[0]
+        out = np.empty((n, 18), dtype=float)
+        out[:, 0::2] = a.real.reshape(n, 9)
+        out[:, 1::2] = a.imag.reshape(n, 9)
+        return out.reshape(-1)
 
     def _flatten(self, picker, layers=None) -> np.ndarray:
         """Flatten one tensor field across (wl, layer) into the Rust layout:
         [n_wl * n_layers * 18] as 9 (re, im) pairs row-major.
-        layers defaults to self.layers; fields() passes the expanded cell."""
+        layers defaults to self.layers; fields() passes the expanded cell.
+        Vectorized: stack the per-layer (n_wl,3,3) blocks, put the layer axis
+        after wl (offset order w*n_layers + li, matching Rust), interleave
+        re/im once — same values as the former double Python loop."""
         layers = self.layers if layers is None else layers
-        n_layers = len(layers)
-        out = np.empty(self.n_wl * n_layers * 18, dtype=float)
-        per_wl = [self._tensor_per_wl(picker(l), "tensor") for l in layers]
-        for w in range(self.n_wl):
-            for li in range(n_layers):
-                off = (w * n_layers + li) * 18
-                tens = per_wl[li][w]
-                pair = np.empty(18, dtype=float)
-                pair[0::2] = tens.real.reshape(9)
-                pair[1::2] = tens.imag.reshape(9)
-                out[off:off + 18] = pair
-        return out
+        stacked = np.stack([self._tensor_per_wl(picker(l), "tensor")
+                            for l in layers])       # (n_layers, n_wl, 3, 3)
+        stacked = np.moveaxis(stacked, 0, 1).reshape(-1, 9)  # (n_wl*L, 9)
+        out = np.empty((stacked.shape[0], 18), dtype=float)
+        out[:, 0::2] = stacked.real
+        out[:, 1::2] = stacked.imag
+        return out.reshape(-1)
 
     # ── solve ───────────────────────────────────────────────────────────────
     def solve(self) -> Dict[str, np.ndarray]:
@@ -409,52 +410,50 @@ def mueller_from_jones(jones: np.ndarray) -> np.ndarray:
     )
 
 
-def _apply_m16(fn, M, out_shape):
-    """Apply a flat-16 Rust scalar fn over (...,4,4) -> out_shape."""
+def _m16_flat(M) -> tuple:
+    """(...,4,4) Mueller stack -> (flat row-major (n,16) contiguous, leading
+    shape). One batched Rust call per metric (Rayon over rows) — the former
+    per-row Python loop is gone (architecture review follow-up)."""
     M = np.asarray(M, dtype=float)
     if M.shape[-2:] != (4, 4):
         raise ValueError(f"expected (...,4,4), got {M.shape}")
-    flat = M.reshape(-1, 16)
-    rows = [np.asarray(fn(row.copy()), dtype=float).reshape(-1) for row in flat]
-    return np.stack(rows).reshape(M.shape[:-2] + out_shape)
+    return np.ascontiguousarray(M.reshape(-1, 16)), M.shape[:-2]
 
 
 def depolarization_index(M):
     """DI over (...,4,4) Mueller matrices -> (...) float; 1 == non-depolarizing."""
-    return _apply_m16(_rs_di, M, ())
+    flat, sh = _m16_flat(M)
+    return np.asarray(_rs_di(flat.reshape(-1)), dtype=float).reshape(sh)
 
 
 def diattenuation(M):
     """Diattenuation vector (first row / M00) over (...,4,4) -> (...,3)."""
-    return _apply_m16(_rs_diat, M, (3,))
+    flat, sh = _m16_flat(M)
+    return np.asarray(_rs_diat(flat.reshape(-1)), dtype=float).reshape(sh + (3,))
 
 
 def polarizance(M):
     """Polarizance vector (first column / M00) over (...,4,4) -> (...,3)."""
-    return _apply_m16(_rs_pol, M, (3,))
+    flat, sh = _m16_flat(M)
+    return np.asarray(_rs_pol(flat.reshape(-1)), dtype=float).reshape(sh + (3,))
 
 
 def circular_dichroism(M):
     """CD = M03/M00 over (...,4,4) -> (...) float (dimensionless)."""
-    return _apply_m16(_rs_cd, M, ())
+    flat, sh = _m16_flat(M)
+    return np.asarray(_rs_cd(flat.reshape(-1)), dtype=float).reshape(sh)
 
 
 def cloude(M):
-    """Cloude coherency eigendecomposition over (...,4,4).
+    """Cloude coherency eigendecomposition over (...,4,4), one batched call.
 
     Returns ``{"lambda": (...,4) descending eigenvalues (sum == M00),
     "entropy": (...) base-4 Shannon entropy}``.
     """
-    M = np.asarray(M, dtype=float)
-    if M.shape[-2:] != (4, 4):
-        raise ValueError(f"expected (...,4,4), got {M.shape}")
-    flat = M.reshape(-1, 16)
-    lam = np.empty((flat.shape[0], 4)); ent = np.empty(flat.shape[0])
-    for k, row in enumerate(flat):
-        l, s = _rs_cloude(row.copy())
-        lam[k] = np.asarray(l, dtype=float); ent[k] = float(s)
-    sh = M.shape[:-2]
-    return {"lambda": lam.reshape(sh + (4,)), "entropy": ent.reshape(sh)}
+    flat, sh = _m16_flat(M)
+    lam, ent = _rs_cloude(flat.reshape(-1))
+    return {"lambda": np.asarray(lam, dtype=float).reshape(sh + (4,)),
+            "entropy": np.asarray(ent, dtype=float).reshape(sh)}
 
 
 def _rot_apply(rs_fn, *angle_args, eps) -> np.ndarray:

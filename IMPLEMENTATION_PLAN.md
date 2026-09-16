@@ -4120,9 +4120,20 @@ thickness layers silently). No other behavior change: full Python suite re-run
 G15a–e, G15d pos/height/FWHM, e2e, FULL-PATH, energy gates all green; Rust 33
 lib tests (+4 new) + 2 integration.
 
-**Left as future work (explicitly, not silently):** batch the Mueller
-`_apply_m16`/`cloude` Python loops into one Rust call per array (perf only);
-vectorize `_flatten` marshalling (perf only); `cholesteric_stack`'s diag
+**Follow-ups completed (same session, measured):** the two remaining Python
+loops are gone — (a) the five Mueller post-ops (DI/D/P/CD/Cloude) are now ONE
+batched Rust call each (same scalar math in `crate::mueller`, Rayon over
+rows behind `py.detach`; pymodule names unchanged, n=0 inputs allowed →
+empty outputs — the old per-row loop raised on empty). Measured on 360
+row-matrices: metrics triple 1.67→0.71 ms (2.4×), Cloude 1.10→0.30 ms
+(3.7×). Shapes/leading-axis semantics preserved (pinned in the probe;
+G11a re-pinned at 3.553e-15, unchanged). (b) `_flatten`/`_flatten_opt`
+marshalling vectorized (stack → moveaxis → single interleaved write; same
+byte layout): 3600 tensors 6.01→0.34 ms (18×), 40-exit 0.072→0.004 ms (18×).
+Full Python suite + Rust 33/2 re-run green after both.
+
+**Left as future work (explicitly, not silently):** release CI (B.1 —
+upstream's release.yml is the template); `cholesteric_stack`'s diag
 assembly stays Python (Layer-list assembly, upstream-idiomatic).
 
 ### B.1 Toolchain pinning audit (vs upstream navette @ 4b59cd7 / 0.7.0)
