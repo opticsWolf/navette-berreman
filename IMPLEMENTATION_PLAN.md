@@ -4125,6 +4125,33 @@ lib tests (+4 new) + 2 integration.
 vectorize `_flatten` marshalling (perf only); `cholesteric_stack`'s diag
 assembly stays Python (Layer-list assembly, upstream-idiomatic).
 
+### B.1 Toolchain pinning audit (vs upstream navette @ 4b59cd7 / 0.7.0)
+
+Question raised post-review: why was the toolchain not pinned against latest
+versions / latest rust? Comparison (upstream facts live-read from the checkout
+root, `release.yml`, and fetched crate manifests — not recalled):
+
+| aspect | upstream navette | ours (before) | ours (now) |
+|---|---|---|---|
+| rustc pin | none — `dtolnay/rust-toolchain@stable` in CI | none, no CI | none (rides stable, like upstream); validated on 1.98.1 (same rustc as their published 0.7.0 wheel) |
+| MSRV declaration | none (workspace Cargo.toml has no `rust-version`) | none — "MSRV-aware" asserted in plan prose only | `rust-version = "1.85"` (edition 2024 floor; dominates pyo3/numpy 0.29's 1.83) |
+| edition | 2024 (their core crate) | 2021 | 2024 |
+| pyo3/numpy | 0.28 workspace pins (abi3-py312) | 0.23 (Phase-0 vintage of the `_smatrix`-style port; never bumped) | 0.29.2/0.29 — one minor AHEAD of upstream's 0.28 (latest per `cargo search`; migration was exactly one rename: `allow_threads` → `detach`) |
+| abi3 | yes (`abi3-py312`) | no (cp313-tagged .pyd) | `abi3-py312` |
+| Cargo.lock | committed (workspace root) | **gitignored (library habit — wrong for a wheel-shipped cdylib)** | committed (76 crates; pyo3 0.29.2, ndarray 0.15.6 for the upstream-adapter surface) |
+| maturin pin | `>=1.5,<2.0` | same | same (local 1.14.1; crates.io latest 1.15.0 — caret range covers it) |
+| requires-python | `>=3.12` | same | same |
+| release CI | 3-OS wheels + OIDC PyPI + crates.io | none | none (deferred; upstream's release.yml is the template) |
+
+**Root cause of the drift:** the port pinned pyo3/numpy 0.23 when it was
+written against the `_smatrix` 0.23-era API surface and never revisited; the
+"MSRV-aware, no new deps" decision was enforced in practice but never written
+into `Cargo.toml` (`rust-version`), and the lock was ignored by library
+crate habit while upstream treats the lock as part of the shipped artifact.
+Fix verified end-to-end: `cargo check/test` (33+2 green) + maturin rebuild +
+full Python gate suite re-run green on the 0.29 stack (13/13 files, same
+observed values: e.g. G5 2.176e-14, G13f 0.0, code-5 |ΔT| 1.75e-2 diverges).
+
 ## Appendix C — Per-phase acceptance checklist (copy into each PR)
 
 ```markdown

@@ -215,7 +215,7 @@ fn sweep(
     )?;
 
     let total = n_wl * n_th;
-    let outs: Vec<PointOut> = py.allow_threads(|| {
+    let outs: Vec<PointOut> = py.detach(|| {
         (0..total)
             .into_par_iter()
             .map(|k| {
@@ -601,7 +601,7 @@ fn fields_sweep(
 
     let total = n_wl * n_th;
     // Each task -> flat [n_z*24] f64 + ok flag; indexed collect keeps order.
-    let outs: Vec<Option<Vec<f64>>> = py.allow_threads(|| {
+    let outs: Vec<Option<Vec<f64>>> = py.detach(|| {
         (0..total)
             .into_par_iter()
             .map(|k| {

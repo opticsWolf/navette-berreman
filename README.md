@@ -63,18 +63,24 @@ After install: `from navette import berreman as bl`.
 
 ### Toolchain / version pins
 
-Built and validated with **rustc 1.75.0**, PyO3 **0.23.5**, numpy crate 0.23,
-NumPy 2.x. PyO3 0.23 releases the GIL via `Python::allow_threads` (not the newer
-`detach`). A few transitive crates raised their MSRV above 1.75 in later patch
-releases, so `Cargo.lock` pins:
+Built and validated with **rustc 1.98.1** (the same stable the upstream
+`navette` 0.7.0 wheel was compiled with), PyO3 **0.29.2**, numpy crate **0.29**,
+NumPy 2.x, maturin 1.14 (pinned `>=1.5,<2.0` like upstream), edition 2024,
+`abi3-py312` (forward-compatible wheels from 3.12 up). Policy mirrors upstream
+`navette`, with one addition:
 
-| crate       | pinned version | reason                        |
-|-------------|----------------|-------------------------------|
-| `rustc-hash`| `2.0.0`        | 2.1.x requires rustc ≥ 1.77   |
-| `rayon`     | `1.10.0`       | keeps `rayon-core` at 1.12.x  |
-| `rayon-core`| `1.12.1`       | 1.13.x requires rustc ≥ 1.80  |
-
-On a newer toolchain you can delete these pins (`cargo update`).
+* **No rust-toolchain.toml, no rustc ceiling** — the crate rides stable, same
+  as upstream's release CI (`dtolnay/rust-toolchain@stable`). Latest stable is
+  validated by every run of the gate suite.
+* **MSRV floor declared** (`rust-version = "1.85"` in Cargo.toml): edition 2024
+  needs 1.85, which dominates pyo3/numpy 0.29's own 1.83. Upstream declares no
+  MSRV; our floor documents the verified minimum instead.
+* **`Cargo.lock` is committed** — for a cdylib shipped as wheels the lock is
+  part of the build contract (upstream commits theirs in the workspace root);
+  the full gate suite is the re-audit tripwire when it changes.
+* Dependency policy: only `num-complex` (core), the upstream `navette` crate
+  + `ndarray` 0.15 (materials adapters), and pyo3/numpy/rayon under the
+  `python` feature. caret-pinned minors, exact resolution by lock.
 
 ## Python API
 

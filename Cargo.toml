@@ -1,8 +1,12 @@
 [package]
 name = "navette-berreman"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 license = "LGPL-3.0-or-later"
+# MSRV floor: edition 2024 (1.85) dominates pyo3/numpy 0.29 (1.83).
+# Upstream navette declares none and rides @stable; this documents the
+# verified floor instead (local build/tests pinned at rustc 1.98.1).
+rust-version = "1.85"
 
 [lib]
 name = "_berreman"
@@ -17,12 +21,12 @@ navette = "0.7"
 ndarray = "0.15"
 
 [dependencies.pyo3]
-version = "0.23"
-features = ["extension-module"]
+version = "0.29"
+features = ["extension-module", "abi3-py312"]
 optional = true
 
 [dependencies.numpy]
-version = "0.23"
+version = "0.29"
 optional = true
 
 [dependencies.rayon]
