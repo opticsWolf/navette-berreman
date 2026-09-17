@@ -171,9 +171,9 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "navette"
-version = "0.7.0"
+version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f32906c981f3badcd24010571d2833c30bbd832978a6f7b252890525a8d2e6b"
+checksum = "0ef763d575196814a89ce69bf278673a771740dab6170fa1a8414755f4eaf632"
 dependencies = [
  "ahash",
  "bytemuck",

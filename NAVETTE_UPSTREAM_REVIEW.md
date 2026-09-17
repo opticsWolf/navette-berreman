@@ -97,40 +97,74 @@ validators (like us).
 
 ---
 
-## F3 — OPEN QUESTION: lossy-media type-5 reflection residual vs the wheel
+## F3 — RESOLVED: the lossy type-5 reflection residual is the F1 fork seen
+## through reverberation (2026-09-18)
 
-**Status: unresolved discrepancy, mechanism unidentified — filed as a
-question, not an accusation.** Against the PyPI wheel, type-5 *reflection*
-on a reverberation-decoupled lossy fixture (400 nm film, n = 2+1.5j) differs
-at max 1.4e-8, scaling *exactly* as σ² (4.01e-9 / 8.64e-10 / 2.06e-10 /
-5.07e-11 / 1.26e-11 at σ = 8/4/2/1/0.5 nm).
+**Mechanism identified and proven. The residual is not an upstream defect
+and not a wheel/source drift — it is the expected consequence of our F1 fix
+observed through the film's internal reverberation.**
 
-What we have ruled out (all measured, repro in our repo):
+Against any wheel (0.7.0 AND 0.7.7: both give 1.41e-8 on the standard
+fixture at wl = 550 nm; a locally built 0.5.0-source engine gives 1.28e-7),
+type-5 *reflection* on a lossy fixture (400 nm film, n = 2+1.5j) differs at
+~1e-8, scaling exactly as σ².
 
-- The dressing formula: our reflection block equals crate-level `f` at
-  1e-15 on lossy kz (`tests/navette_parity.rs::type5_blocks_vs_theory_and_upstream`).
-- The wavevectors: codes 1 and 4 on the *same* fixture match the wheel at
-  1e-14, sharing the identical kz path (`tests/test_roughness.py` probe).
-- Reverberation: round-trip residue is ~1e-12 in power; the wrong-sign `ga`
-  is ≈ 1.00 on this fixture, so ga-mediated feedback is ~1e-16, four orders
-  short. The σ² scaling to a nonzero constant (5.0e-11/nm²) points at the
-  σ-dependent dressing itself, yet the dressing formula is proven identical.
+**Why the original ruling-out was wrong:** the review dismissed
+reverberation feedback with "round-trip residue ~1e-12 in power ⇒
+ga-mediated feedback ~1e-16". That squares the fork twice. The fork enters
+R *linearly* through the amplitude cross-term of the coherent sum:
+the second-bounce amplitude is t21·t12·r₂·φ² ~ 1.4e-3 (power ~2e-6, NOT
+1e-12 — the 1e-12 figure included both r-factors squared), its ga-vs-f
+difference is (f−ga) ~ σ²·O(k²) ~ 5% at σ = 8 nm, and the cross-term with
+the main reflected beam 2·Re(r₁·f·conj(δ₂-bounce)) lands at ~1e-8. Exactly
+the observed magnitude and the exact σ² law.
 
-Suspects, in order: (a) wheel-build vs published-crate-source drift in the
-NC path (the wheel is opaque — `nevot_croce_factors` is not Python-exposed,
-so we cannot isolate it live); (b) solver-level NC handling of complex kz
-outside the shared `(f, ga)` helper (e.g. branch/regularization paths that
-trigger only for type 5 on lossy media).
+**Evidence chain (all measured 2026-09-18):**
 
-**Repro (all local, needs the wheel + this repo):** the `code 5 (R)` arm of
-`tests/test_roughness.py` (decoupled fixture) plus the σ-scaling probe in
-our session notes. Upstream ask: reproduce with a debug print of `(f, ga)`
-at the lossy interface, or expose `nevot_croce_factors` in `navette._smatrix`
-(one re-export line) so downstream validators can isolate it without
-rebuilding the crate.
+1. **Probe A (crate source, 0.7.7):** `tests/navette_parity.rs` re-run
+   against crates.io navette 0.7.7 (Cargo.lock bumped): the published
+   crate's `nevot_croce_factors`/`w_function_inner` still match our formula
+   at the pinned 1e-15 on lossy kz. The 0.5.0→0.7.7 source diff shows the
+   NC factors bit-identical (0.7.7 centralizes them into `optics_core`
+   after the R1.1 desync fix; `forward_branch` is the old inline cos rule,
+   asserted bit-identical by the crate's own test).
+2. **Bare-interface probe:** the wheel's effective f on the lossy interface
+   (two-layer stack, one dressed interface) reproduces |r·f|² to 1.7e-16 —
+   identical on the 0.7.7 wheel and a 0.5.0-source build. The NC factor in
+   the wheel is exact.
+3. **Asymmetry probe:** dressing ONLY the exit interface agrees **exactly**
+   (dR = 0.0, both polarizations, both angles) — a semi-infinite exit has no
+   reverberation, so the fork cannot leak back. Dressing only the FRONT
+   interface carries the full σ² residual (6.28e-8 at 0°, 400 nm film).
+4. **FP-model magnitude:** a two-interface numpy Fabry–Pérot with (f, ga)-t
+   vs (f, f) transmission dressing gives 1.35e-7 at the front-only fixture —
+   the same order as the engines (the 2× gap is the admittance-normalization
+   convention in the model, not the mechanism).
+5. **Knockout — the reverberation kill:** scaling the film thickness,
+   the engine residual collapses 6.284e-8 (400 nm) → 5.153e-13 (800 nm) →
+   **0.0 exactly** (1600 nm), i.e. exponentially with e^{−4·Im β} — the
+   reverberation channel. At the module's wl = 550 nm the pin measures
+   2.55e-9 → 1.63e-14 → 0.0 (the absolute value is phase-dependent; the
+   exponential envelope is what is pinned).
 
-**Severity: low (open).** 100× inside our sanity bound, exact parity proven
-at crate level; tracked so it is not mistaken for a regression on either side.
+**Resolution:** expected divergence given the documented F1 fork. Our
+transmission block keeps the energy-conserving ga (the Phase-8 fix);
+upstream applies f to transmission as well (the F1 energy bug); any
+internally reverberating structure mixes the two back into R at O(σ²).
+The σ²-law constant (5.0e-11/nm² at the review's fixture, σ5-scaled with
+σ6 fixed) is the fork-through-reverberation signature and is now pinned as
+a regression gate (`tests/test_roughness.py` `_f3_thickness_pin`): the
+residual must collapse with film thickness (400 nm ≤ 1e-7, 800 nm ≤ 1e-11,
+1600 nm == 0.0). A wheel that starts matching us at 400 nm would mean the
+fork closed (F1 adopted upstream or restored here) — the thickness pin and
+the transmission fork-guard together make that loud.
+
+**Upstream ask, revised:** no longer needed for F3 (the wheel is vindicated
+and the fork is a documented model dispute under F1). The one re-export
+(`nevot_croce_factors` in `navette._smatrix`) remains a nice-to-have for
+downstream validators, not a defect.
+
+**Severity: closed (informational).**
 
 ---
 
@@ -143,6 +177,15 @@ at crate level; tracked so it is not mistaken for a regression on either side.
 - 2026-09-16 (P9): F4 (`table_nk` asserts → `PanicException` on malformed
   input; ours raises `ValueError`). Repro: `src/materials.rs` unit test +
   wheel probe in session notes.
+- 2026-09-18 (F3): **F3 RESOLVED** — the lossy type-5 reflection residual
+  is the F1 transmission fork (our ga vs upstream f-on-t) leaking back into
+  R through internal reverberation; proven by the front/exit asymmetry
+  (exit-only agrees at 0.0 exactly), the σ² law, and the reverberation kill
+  (6.28e-8 → 5.15e-13 → 0.0 at 400/800/1600 nm). Wheel 0.7.7 re-audited:
+  crate source still bit-identical to our NC formula (parity tests re-run
+  green); wheel bare-interface f exact at 1.7e-16; locally built 0.5.0
+  engine reproduces the residual (1.28e-7) — mechanism version-stable.
+  Regression pin added (`_f3_thickness_pin` in `tests/test_roughness.py`).
 - 2026-09-16 (P10): reviewed, nothing new. The det-typo's chiral consequence
   (live `full_berreman` scales every a_i by det² = (εμ−κ²)² with κ ≠ 0, so it
   can never oracle a chiral stack) is already covered by the §0.5/F1-adjacent

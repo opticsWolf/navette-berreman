@@ -17,7 +17,7 @@ num-complex = "0.4"
 # Upstream Navette engine (crates.io): dispersion kernels (materials) + smatrix
 # parity surface. Phase 9 decision: depend, don't port — all kernels incl. the
 # KK trio come from here; tensor assembly is ours (src/materials.rs).
-navette = "0.7"
+navette = "0.7.7"
 ndarray = "0.15"
 
 [dependencies.pyo3]

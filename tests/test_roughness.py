@@ -141,12 +141,46 @@ for ang in angles:
 print(f"  -> code 5 reflection worst (decoupled) = {worst_R5:.2e}")
 # System-level sanity only (<= 1e-6): the PRECISE proof that the fix left
 # reflection untouched is the Rust test (R-block == upstream f at 1e-15,
-# tests/navette_parity.rs). Against the 0.7.0 wheel a ~1e-8 residual remains
-# on lossy media, scaling exactly as sigma^2 — formula parity at crate level
-# is proven, so this is a wheel/solver-level NC handling difference, mechanism
-# open (see Phase 8 section 8.6). Margin here is ~100x; a reflection-touching
-# change would move stack R at the 1e-3 level (measured pre/post-fix).
+# tests/navette_parity.rs). The residual ~1e-8 vs the wheel (measured 1.41e-8
+# on the 0.7.0 AND 0.7.7 wheels, 1.28e-7 on a locally built 0.5.0) is the
+# F1 transmission fork (our energy-conserving ga vs upstream f-on-t) leaking
+# back into R through the film's internal reverberation — F3, RESOLVED
+# 2026-09-18 (NAVETTE_UPSTREAM_REVIEW.md). Evidence: exit-only dressing
+# agrees EXACTLY (a semi-infinite exit has no reverberation), front-only
+# carries the sigma^2 law, and the residual dies with film thickness
+# (reverberation kill): 6.28e-8 (400 nm) -> 5.15e-13 (800 nm) -> 0.0
+# (1600 nm) — asserted below as the regression pin. Not an upstream defect:
+# the wheel's bare-interface f is exact (1.7e-16) and the 0.7.7 crate source
+# matches our formula bit-for-bit.
+# Margin here is ~100x; a reflection-touching change would move stack R at
+# the 1e-3 level (measured pre/post-fix).
 assert worst_R5 < 1e-6, "code-5 reflection arm moved substantially"
+
+# F3 regression pin: the residual is ga-vs-f reverberation feedback, so it
+# MUST collapse exponentially with film thickness (absorption kills the
+# round trip). Measured: 6.28e-8 (400) -> 5.15e-13 (800) -> 0.0 (1600).
+def _f3_thickness_pin():
+    r5 = 8.0
+    out = {}
+    for d in (400.0, 800.0, 1600.0):
+        eps_loss = np.diag([(2.0 + 1.5j) ** 2] * 3).astype(complex)
+        r = bl.BerremanStack([bl.Layer(eps_loss, d, roughness=(5, r5))],
+                             [wl], [0.0], n_entry=1.0, n_exit=1.5,
+                             method="scattering", exit_roughness=None).solve()
+        ours = r["R"][0, 0].real
+        S = sm.ScatterMatrix(np.array([1.0, 2.0 + 1.5j, 1.5], dtype=complex),
+                             [0.0, d, 0.0], wavelengths=[wl], angles=[0.0],
+                             roughness_types=[0, 5, 0],
+                             roughness_values=[0.0, r5, 0.0])
+        theirs = float(np.asarray(S.reflectance_transmittance("u")["Rp"]).ravel()[0])
+        out[d] = abs(ours - theirs)
+    return out
+
+_f3_dR = _f3_thickness_pin()
+print(f"  -> F3 reverberation kill: 400nm={_f3_dR[400.0]:.2e} "
+      f"800nm={_f3_dR[800.0]:.2e} 1600nm={_f3_dR[1600.0]:.2e}")
+assert _f3_dR[400.0] < 1e-7 and _f3_dR[800.0] < 1e-11 \
+    and _f3_dR[1600.0] == 0.0, "F3 reverberation-kill pin moved"
 
 print(f"\n{'code 5 (T)':<12}{'angle':>6}   {'max|dT|':>10}")
 min_T5 = np.inf

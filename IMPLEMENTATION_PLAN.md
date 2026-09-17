@@ -3263,12 +3263,17 @@ without this, or CI goes red for the right reason with no record of why):
   live 0.7.0 wheel: min |ΔT| = 1.75e-2, four orders of margin; pre/post-fix
   |ΔT| ≈ 0.11–0.22 vs the pre-fix 2.3e-14 parity). Comment cites §8.1 +
   upstream `code_review.md` §3.2 + the 0.7.0 `optics_core.rs` docstring.
-  OPEN (mechanism unidentified, evidence filed): against the 0.7.0 wheel a
-  1.4e-8 R residual remains on lossy media scaling exactly as σ² — while
-  crate-level formula parity is 1e-15 and codes 1/4 match the same fixture
-  at 1e-14. Suspect: wheel-build vs .crate-source drift in NC handling, or
-  solver-level NC treatment of lossy kz. Does not gate anything (100× margin
-  in the sanity arm, exact pin in Rust).
+  RESOLVED (2026-09-18, F3 — see NAVETTE_UPSTREAM_REVIEW.md): the ~1e-8 R
+  residual on lossy media (identical on the 0.7.0 AND 0.7.7 wheels; 1.28e-7
+  on a locally built 0.5.0-source engine) is the F1 transmission fork
+  (our energy-conserving ga vs upstream f-on-t) leaking back into R through
+  the film's internal reverberation — proven by the front/exit asymmetry
+  (exit-only dressing agrees at 0.0 exactly), the exact σ² law, the
+  FP-model magnitude agreement, and the reverberation kill (residual
+  6.28e-8 → 5.15e-13 → 0.0 at 400/800/1600 nm). The wheel's bare-interface
+  f is exact (1.7e-16) and the 0.7.7 crate source matches our formula
+  bit-for-bit (parity tests re-run after the Cargo.lock bump to 0.7.7).
+  Regression pin: `_f3_thickness_pin` in `tests/test_roughness.py`.
 - README "intentional deviations" section gains a second entry (after the
 det/division note): type-5 transmission uses `ga`, upstream uses `f` (energy
   bug, measured 7.5% loss); reflection identical; re-converges as σ→0.
