@@ -185,6 +185,18 @@ slab = bl.chiral_layer(1.5, 0.05, 500.0)
 chol = bl.cholesteric_stack(1.5, 1.7, 350.0, 5)  # 48 slices/pitch
 ```
 
+**Coming from DBF/β or ORD literature?** Bridges (see `CHIRAL_BRIDGE.md`
+for the derivations and gate values):
+
+- `dbf_beta_to_kappa(beta, n, wavelength_nm)` — Drude–Born–Fedorov β
+  (`D = ε(E+β∇×E)`) → our κ, reproducing the DBF circular birefringence
+  `Δn = 2βk₀n²/(1−β²k₀²n²)` exactly; `kappa_to_dbf_beta` inverts.
+- `condon_kappa(wavelengths_nm, R, lambda0_nm, gamma)` — Condon's
+  single-oscillator chirality dispersion `κ(ω) = ωR/(ω₀²−ω²−iωΓ)`
+  (Condon–Altar–Eyring 1937; Lindell 1994 form), returned in our
+  normalization (`n± = n±κ`); feeds `kappa_table`/Table interpolation,
+  γ>0 gives complex κ for the tensor path.
+
 ### Mueller-matrix post-processing
 
 Elementwise over the solved `M_refl`/`M_trans` grids (`(...,4,4)` in,

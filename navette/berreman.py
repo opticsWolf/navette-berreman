@@ -569,9 +569,9 @@ def kappa_table(wavelengths_nm, kappas):
 
     Thin validation wrapper (finite, matching lengths, ascending λ ≥ 1
     point): returns ``(np.asarray(wavelengths, float), np.asarray(kappas,
-    float))`` for use with Phase-9 Table-model interpolation by the caller
-    (no new formula — cf. §10.3; a named Condon ORD model stays a stretch
-    goal pending a cited source + reviewer sign-off).
+    float))`` for use with Phase-9 Table-model interpolation by the caller.
+    For a named physical model see ``condon_kappa`` (§10.5,
+    CHIRAL_BRIDGE.md; gates G16).
     """
     wl = np.atleast_1d(np.asarray(wavelengths_nm, dtype=float))
     ka = np.atleast_1d(np.asarray(kappas, dtype=float))
@@ -583,6 +583,110 @@ def kappa_table(wavelengths_nm, kappas):
     if wl.size > 1 and not np.all(np.diff(wl) > 0):
         raise ValueError("kappa_table: wavelengths must be strictly ascending")
     return wl, ka
+
+
+_C0_NM_S = 299792458e9  # c₀ in nm/s
+
+
+def dbf_beta_to_kappa(beta, n, wavelength_nm):
+    """Drude–Born–Fedorov β → Pasteur κ (weak-chirality bridge, docs §10.9).
+
+    DBF constitutive relations ``D = ε(E + β∇×E)``, ``B = μ(H + β∇×H)``
+    (e^{-iωt}; Cho, arXiv:1501.01078 eqs (2)–(3)) have the EXACT circular
+    eigen-indices ``n± = n/(1 ∓ x)`` with ``x = β·k₀·n`` (derived from
+    plane-wave algebra in §10.9; asymmetric about ``n`` — no single κ
+    matches both).  This helper returns the half-circular-birefringence
+    mapping ``κ_sym = (n⁺−n⁻)/2 = n·x/(1−x²)``, which reproduces the DBF
+    circular birefringence Δn EXACTLY and each absolute index to O(x²)
+    (the mean-index and per-channel-impedance residues are O(x²)/O(x)
+    respectively — documented, see §10.9).  Weak-chirality limit
+    ``κ ≈ β·k₀·n²``.  Inverse: ``kappa_to_dbf_beta``.
+    """
+    beta = float(beta)
+    n = float(n)
+    lam = float(wavelength_nm)
+    if not (np.isfinite(beta) and np.isfinite(n) and np.isfinite(lam)):
+        raise ValueError("dbf_beta_to_kappa: all arguments must be finite")
+    if n <= 0 or lam <= 0:
+        raise ValueError(f"dbf_beta_to_kappa: need n > 0 and wavelength > 0, "
+                         f"got n={n}, lambda={lam}")
+    x = beta * (2 * np.pi / lam) * n
+    if abs(x) >= 1.0:
+        raise ValueError(
+            f"dbf_beta_to_kappa: |beta*k0*n|={abs(x):.4g} >= 1 hits the DBF "
+            "eigenvalue pole n+=n/(1-x); DBF itself breaks down there")
+    if abs(x) >= 0.2:
+        warnings.warn(
+            f"dbf_beta_to_kappa: |beta*k0*n|={abs(x):.4g} >= 0.2; outside "
+            "the natural-media weak-chirality regime (same boundary as "
+            "chiral_layer's |kappa| >= 0.2n warning)", stacklevel=2)
+    return n * x / (1.0 - x * x)
+
+
+def kappa_to_dbf_beta(kappa, n, wavelength_nm):
+    """Exact inverse of ``dbf_beta_to_kappa`` (κ_sym ↔ β roundtrip).
+
+    From ``κ/n = x/(1−x²)``: ``x = (√(1+4(κ/n)²) − 1)/(2(κ/n))``,
+    ``β = x/(k₀·n)``.  Requires ``|κ| < n`` (det = n²−κ² > 0).
+    """
+    kappa = float(kappa)
+    n = float(n)
+    lam = float(wavelength_nm)
+    if not (np.isfinite(kappa) and np.isfinite(n) and np.isfinite(lam)):
+        raise ValueError("kappa_to_dbf_beta: all arguments must be finite")
+    if n <= 0 or lam <= 0:
+        raise ValueError(f"kappa_to_dbf_beta: need n > 0 and wavelength > 0, "
+                         f"got n={n}, lambda={lam}")
+    if abs(kappa) >= n:
+        raise ValueError(
+            f"kappa_to_dbf_beta: |kappa|={abs(kappa):.4g} >= n={n:.4g}; "
+            "det = n^2-k^2 <= 0 (singular chiral medium)")
+    a = kappa / n
+    # x = (sqrt(1+4a^2)-1)/(2a) rationalized: no small-a cancellation
+    x = 2.0 * a / (1.0 + np.sqrt(1.0 + 4.0 * a * a)) if a != 0.0 else 0.0
+    return x * lam / (2 * np.pi * n)
+
+
+def condon_kappa(wavelengths_nm, R, lambda0_nm, gamma=0.0):
+    """Condon single-oscillator chirality dispersion κ(λ) (docs §10.9).
+
+    Condon–Altar–Eyring one-electron rotatory power (1937; Lindell 1994
+    bi-isotropic form; Akyurtlu & Werner 2004 as the FDTD-standard):
+
+        κ(ω) = ω·R / (ω₀² − ω² − i·ω·Γ),   ω = 2πc₀/λ (vacuum),
+
+    with R the rotational-strength amplitude (units of angular frequency
+    in our normalization; a per-material fit parameter — its absolute
+    scale is convention-dependent across the literature, its dispersion
+    SHAPE is not), ω₀ the resonant angular frequency (``lambda0_nm``), Γ
+    the damping.  Returned κ is in OUR normalization: eigen-indices
+    ``n± = n ± κ`` (Task-0-pinned; matches the Lindell eigenvalue
+    structure ``n± = √(εμ) ± κ``).  Positive R below resonance gives
+    κ > 0 ⇒ ``arg(t_R) − arg(t_L) = +k₀κd`` (G15c sense, channel-0=RCP).
+
+    ``gamma=0`` (lossless ORD) returns a real array; ``gamma > 0``
+    returns complex κ (Im κ > 0 ⇒ R-channel absorbs; feed via the tensor
+    path, see §10.9 — ``rho = -1j·κ[:,None,None]·I₃``).  ω → 0 gives
+    κ → 0 linearly (the ω numerator: no static chirality); far from
+    resonance κ ≈ ωR/(ω₀² − ω²) real.
+    """
+    lam = np.atleast_1d(np.asarray(wavelengths_nm, dtype=float))
+    R = float(R)
+    lam0 = float(lambda0_nm)
+    gam = float(gamma)
+    if lam.size == 0 or not np.all(np.isfinite(lam)) or np.any(lam <= 0):
+        raise ValueError("condon_kappa: wavelengths must be non-empty, "
+                         "finite and > 0")
+    if not (np.isfinite(R) and np.isfinite(lam0) and np.isfinite(gam)):
+        raise ValueError("condon_kappa: R, lambda0_nm, gamma must be finite")
+    if lam0 <= 0:
+        raise ValueError(f"condon_kappa: lambda0_nm must be > 0, got {lam0}")
+    if gam < 0:
+        raise ValueError(f"condon_kappa: gamma must be >= 0, got {gam}")
+    om = 2 * np.pi * _C0_NM_S / lam
+    om0 = 2 * np.pi * _C0_NM_S / lam0
+    kappa = om * R / (om0 * om0 - om * om - 1j * om * gam)
+    return np.real(kappa) if gam == 0.0 else kappa
 
 
 def twisted_stack(eps_uniaxial, total_nm, twist_rad, n_slices, grid="midpoint"):

@@ -3809,9 +3809,9 @@ def chiral_layer(n, kappa, thickness_nm, mu=1.0):
 
 def kappa_table(wavelengths_nm, kappas):
     """Dispersive κ by reusing the Phase-9 Table model (no new formula).
-    A named single-oscillator Condon ORD model is a STRETCH GOAL with a
-    literature checkpoint — do NOT hardcode a Condon form without a cited
-    source and reviewer sign-off (competing sign/factor conventions)."""
+    (Historical: the named Condon ORD model was a stretch goal with this
+    literature bar — CLOSED in §10.5: `condon_kappa` ships with the cited
+    Condon–Altar–Eyring 1937 form and gates G16.)"""
 ```
 
 ### 10.4 Gates G15a–c (`tests/test_chiral.py`, no external reference)
@@ -3951,10 +3951,13 @@ third, distinct nonreciprocal form — keep the three labels separate in docs.
   first-order spatial-dispersion term — what helix-composite homogenization
   yields — with a century of analytic results. Relevant only for time-domain
   work or β-from-geometry fitting; neither applies here.
-- **Actionable residue:** metamaterial papers report **β**, so the docs must
-  ship a weak-chirality β↔κ translation helper. Do NOT hardcode a closed
-  form from memory — cite the mapping source at implementation time
-  (reviewer checkpoint, same bar as the Condon stretch goal in §10.3).
+- **Actionable residue:** metamaterial papers report **β**, so the docs
+  must ship a weak-chirality β↔κ translation helper. Do NOT hardcode a
+  closed form from memory — cite the mapping source at implementation
+  time. (CLOSED in §10.5: `dbf_beta_to_kappa`/`kappa_to_dbf_beta` ship
+  with the derivation anchored to Cho's cited DBF equations — see
+  CHIRAL_BRIDGE.md §4; the "no memorized formula" bar is satisfied by
+  derivation-from-cited-equations, recorded as reviewer checkpoint.)
 
 Sources: 1204.5350 · 1501.01078 · 1605.06406 (bi-isotropic surface waves) ·
 2406.10277 (Tellegen/axion link). Full study in session notes; this section is
@@ -4019,6 +4022,60 @@ fresnel 0/0 divisions). G15a singularity arm (n_failed = 1 + NaN) needed
 both. Note EM is DEGREE-OF-FREEDOM-exempt: `expm(Δ)` needs no eig, so EM
 solves degenerate layers correctly where TM/SM honestly return None —
 uniform-None was rejected (uniformity over cleverness loses to correctness).
+
+## Phase 10.5 — Condon ORD + DBF β↔κ bridge (as-built, post-review)
+
+**Unblocks two §10.3/§10.7 deferrals** ("Condon stretch goal" and "β↔κ
+helper — do NOT hardcode a closed form without a cited source"). Full
+verification guide with live-fetched sources, derivations, convention
+traps, and measured gate values: **CHIRAL_BRIDGE.md** (normative; this
+section is the index). Engine UNCHANGED — expand-only adapters beside
+`kappa_table` in `navette/berreman.py`.
+
+**Literature (live, not memory):** DBF definitions + the DBF↔ChC parameter
+map from Cho (arXiv:1501.01078, eqs (2)–(9), PDF text extracted); Condon
+single-oscillator form `κ(ω) = ωR/(ω₀²−ω²−iωΓ)` with the Lindell
+bi-isotropic constitutive relations and the Condon–Altar–Eyring 1937 /
+Akyurtlu–Werner 2004 citations (Wikipedia *Condon model* raw wikitext);
+context: Kim & Kim (1605.06406), Freymond–Picard (1204.5350). The DBF
+eigenvalue relation `n± = n/(1∓x)`, `x = βk₀n`, is DERIVED in
+CHIRAL_BRIDGE.md §4 from Cho's cited equations (4-line plane-wave algebra;
+no verbatim source found — recorded as reviewer checkpoint).
+
+**API (all in `navette/berreman.py`):**
+- `dbf_beta_to_kappa(beta, n, wavelength_nm)` — returns the
+  half-circular-birefringence κ_sym `= n·x/(1−x²)`: reproduces the DBF
+  circular birefringence Δn **exactly**, each absolute index to O(x²);
+  hard error at |x| ≥ 1 (DBF pole), warn at |x| ≥ 0.2 (same regime
+  boundary as `chiral_layer`).
+- `kappa_to_dbf_beta(kappa, n, wavelength_nm)` — exact closed-form
+  inverse (rationalized `x = 2a/(1+√(1+4a²))`, no small-a cancellation);
+  requires |κ| < n.
+- `condon_kappa(wavelengths_nm, R, lambda0_nm, gamma=0)` — the Condon
+  oscillator in OUR normalization (n± = n±κ, Task-0-pinned; matches the
+  Lindell eigenvalue structure). R is a per-material fit amplitude (its
+  absolute scale is convention-dependent across the literature; the
+  dispersion SHAPE is not). γ=0 → real array (feeds `kappa_table`);
+  γ>0 → complex κ via the tensor path (`rho = −1j·κ[:,None,None]·I₃`).
+
+**Gates G16a–e (`tests/test_chiral_models.py`, all analytic-only):**
+G16a DBF Δn through the full solver vs the β-side formula (3.764e-14) +
+G15b re-pins; G16a2 independent hand-built DBF Airy slab reference
+(sanity 9.875e-16; residue 4.268e-2 = the O(x²) mean-index term, 0.0429
+predicted); G16a3 discriminator — κ_plus is off Δn_DBF by exactly
+`2k₀d·nx²/(1−x²)` (0.078737 == algebra exactly) proving κ_sym does real
+work; G16b roundtrip 3.488e-16; G16c weak limit 1.0e-4 (= x²); G16d
+Condon static/real/sign discipline (spread 1.5e-5 = the source's own
+1/(1−(ω/ω₀)²) correction); G16e lossy dichroism through the tensor path
+(ln|tL/tR| = 2.3e-3 == 2k₀·Im(κ)d). Five gate-side lessons (Airy sign
+slips, n2 threading, rotation = half arg-ratio, inverse cancellation,
+static-bound correction) recorded in CHIRAL_BRIDGE.md §9.
+
+**Documented convention note:** a DBF slab and our Pasteur slab agree in
+circular birefringence exactly (κ_sym) but differ in the interface factor
+at O(x) — the known parameterization inequivalence Cho argues; one more
+reason κ/Pasteur is canonical (§10.7). Physical rotation = k₀κd;
+arg(t_R)−arg(t_L) = 2k₀κd (half-ratio is the rotation).
 
 ## Appendix A — Upstream reference index (stable pointers)
 
