@@ -4136,6 +4136,40 @@ literature-first discipline.
 
 ### 11.2 What we implement (design)
 
+**DECISION (reviewer session, recorded): implement BOTH routes —
+asymmetrically.** Rationale:
+
+- *Route B alone is not shippable under the repo's discipline:* every
+  feature carries an external anchor; a B-only feature would be validated
+  only against our own solver — self-referential (eigenpath vs Berreman
+  matrix are cousins, not independent witnesses), and precisely where the
+  convention-trap risk is highest (signs, ω scaling, basis mapping).
+- *Route A is cheap:* it is NOT a second implementation of the feature —
+  it is ~40 lines of Rust for one step, the LD/LB extraction (elementwise
+  √ε semantics + 45°-rotated tensor + live sign/ω conventions). The
+  downstream kernels (`diff_mueller_matrix`, `brown_params`,
+  `mueller_from_diff`) are ONE implementation each, fed by either route;
+  the routes differ only in how (β, d) are obtained.
+- *The validation ladder (why both beats either alone):*
+  1. Route A vs live BerreMueller (G17b) — anchors formula replication
+     AND the convention mapping to an external oracle.
+  2. Route B vs Route A on diagonal fixtures — proves the eigenpath
+     generalization reproduces the scalar path where they overlap.
+  3. Route B (expm) vs our full 4×4 solver (G17a) — the cross-formalism
+     gate. Failure triage: G17b fails → formulas/mapping; G17b green +
+     diagonal-vs-eigenpath fails → eigenpath; both green + G17a fails →
+     generator/expm/basis mapping.
+  (Phase-8 lesson: the two-route pattern caught a real structural defect
+  precisely because independent routes disagree locally, not globally.)
+- *API consequence:* both stay public. Route A documented as the
+  live-compatible path (parity/porting users get bit-familiar numbers);
+  Route B as the general path (chirality/MO/non-diagonal — what live
+  cannot express). Fallback considered and rejected: Route A as
+  test-side-only reference — rejected because the stacked external anchor
+  is worth one extra binding.
+- *Implementation order:* Route A → G17b → Route B → G17a → reductions
+  (G17c) → z-resolution (G17d) → SI consistency (G17e, optional).
+
 **Route A — live-compatible scalar path (validation oracle):**
 `linear_optics_scalar(eps_diag, spectrum, length)` — assumes diagonal
 per-wavelength ε (broadcast diagonal (n_wl,3,3)):
