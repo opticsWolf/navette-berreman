@@ -1492,3 +1492,379 @@ pub fn rot_apply_matrix(
     }
     Ok((ore, oim))
 }
+
+
+// ── Phase 11: POLARIZANCE v2 (batched; per-unit-length differentials) ─────────
+
+/// Tensor batch reader for the interleaved [n*18] (re,im)-pair layout
+/// (same layout the stack solve consumes — Python `_flatten` emits it).
+fn read_tensor_batch(data: &[f64]) -> PyResult<Vec<Tensor3>> {
+    if data.len() % 18 != 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "tensor batch must have 18*n elements, got {}",
+            data.len()
+        )));
+    }
+    Ok((0..data.len() / 18).map(|w| read_tensor(data, w * 18)).collect())
+}
+
+/// 3-vector batch reader (flat 3n, row-major triples).
+fn read_vec3_batch(data: &[f64], name: &str) -> PyResult<Vec<[f64; 3]>> {
+    if data.len() % 3 != 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{name} batch must have 3*n elements, got {}",
+            data.len()
+        )));
+    }
+    Ok(data.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect())
+}
+
+/// Extracted differential data + Jones propagator, per row.
+struct BulkDiffOut {
+    b: [f64; 3],
+    d: [f64; 3],
+    absorbance: f64,
+}
+
+/// Route A (live-compatible): linear-optics spectra per wavelength.
+/// eps: [n*18] interleaved per-wl 3x3; omega: [n] (same unit system as eps);
+/// length_over_c: scalar (live's unit-scaling knob; 1.0 = per-unit-length).
+/// Returns (ld, ldp, lb, lbp, absorbance_v1, absorbance_v2), each length n.
+/// NOTE: live's max-of-two-orientations absorbance hack is NOT applied; both
+/// orientation sums are returned and the caller chooses (plan §11.4).
+#[pyfunction]
+#[pyo3(name = "linear_optics_scalar")]
+pub fn linear_optics_scalar_py(
+    py: Python<'_>,
+    eps: PyReadonlyArray1<f64>,
+    omega: PyReadonlyArray1<f64>,
+    length_over_c: f64,
+) -> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>)> {
+    let es = read_tensor_batch(eps.as_slice()?)?;
+    let om = omega.as_slice()?;
+    if es.len() != om.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "eps batch {} != omega length {}",
+            es.len(),
+            om.len()
+        )));
+    }
+    let outs: Vec<[f64; 6]> = py.detach(|| {
+        es.par_iter()
+            .zip(om.par_iter())
+            .map(|(e, w)| crate::polarizance::linear_optics_scalar(e, *w, length_over_c))
+            .collect()
+    });
+    let mut cols: [Vec<f64>; 6] = Default::default();
+    for o in &outs {
+        for (c, v) in cols.iter_mut().zip(o) {
+            c.push(*v);
+        }
+    }
+    let mut it = cols.into_iter();
+    Ok((
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+    ))
+}
+
+/// Brown polarizance decomposition per row: (b, d) -> (r_p, i_p, n_p).
+#[pyfunction]
+#[pyo3(name = "polarizance_decompose")]
+pub fn polarizance_decompose_py(
+    py: Python<'_>,
+    b_flat: PyReadonlyArray1<f64>,
+    d_flat: PyReadonlyArray1<f64>,
+) -> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>)> {
+    let bs = read_vec3_batch(b_flat.as_slice()?, "b")?;
+    let ds = read_vec3_batch(d_flat.as_slice()?, "d")?;
+    if bs.len() != ds.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "b batch {} != d batch {}",
+            bs.len(),
+            ds.len()
+        )));
+    }
+    let outs: Vec<[f64; 3]> = py.detach(|| {
+        bs.par_iter()
+            .zip(ds.par_iter())
+            .map(|(b, d)| crate::polarizance::polarizance_decompose(b, d))
+            .collect()
+    });
+    let (mut rp, mut ip, mut np) = (Vec::new(), Vec::new(), Vec::new());
+    for o in outs {
+        rp.push(o[0]);
+        ip.push(o[1]);
+        np.push(o[2]);
+    }
+    Ok((rp, ip, np))
+}
+
+/// Brown 1999 a0..a3 per row (live formulas; NaN quadruple when n_p == 0).
+/// r_p/i_p/n_p/length: equal-length arrays (scalar length: broadcast in Python).
+#[pyfunction]
+#[pyo3(name = "brown_params")]
+pub fn brown_params_py(
+    py: Python<'_>,
+    r_p: PyReadonlyArray1<f64>,
+    i_p: PyReadonlyArray1<f64>,
+    n_p: PyReadonlyArray1<f64>,
+    length: PyReadonlyArray1<f64>,
+) -> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>)> {
+    let rs = r_p.as_slice()?;
+    let is = i_p.as_slice()?;
+    let ns = n_p.as_slice()?;
+    let ls = length.as_slice()?;
+    let n = rs.len();
+    if is.len() != n || ns.len() != n || ls.len() != n {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "r_p/i_p/n_p/length must have equal lengths",
+        ));
+    }
+    let outs: Vec<Option<[f64; 4]>> = py.detach(|| {
+        rs.par_iter()
+            .zip(is.par_iter())
+            .zip(ns.par_iter())
+            .zip(ls.par_iter())
+            .map(|(((r, i), np), l)| crate::polarizance::brown_params(*r, *i, *np, *l))
+            .collect()
+    });
+    let (mut a0, mut a1, mut a2, mut a3) = (
+        vec![f64::NAN; n], vec![f64::NAN; n], vec![f64::NAN; n], vec![f64::NAN; n],
+    );
+    for (k, o) in outs.iter().enumerate() {
+        if let Some(a) = o {
+            a0[k] = a[0];
+            a1[k] = a[1];
+            a2[k] = a[2];
+            a3[k] = a[3];
+        }
+    }
+    Ok((a0, a1, a2, a3))
+}
+
+/// Differential Mueller generator per row: (b, d) -> flat 16 (traceless).
+#[pyfunction]
+#[pyo3(name = "diff_mueller_matrix")]
+pub fn diff_mueller_matrix_py(
+    py: Python<'_>,
+    b_flat: PyReadonlyArray1<f64>,
+    d_flat: PyReadonlyArray1<f64>,
+) -> PyResult<Vec<f64>> {
+    let bs = read_vec3_batch(b_flat.as_slice()?, "b")?;
+    let ds = read_vec3_batch(d_flat.as_slice()?, "d")?;
+    if bs.len() != ds.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "b batch {} != d batch {}",
+            bs.len(),
+            ds.len()
+        )));
+    }
+    let mut out = vec![0.0_f64; bs.len() * 16];
+    py.detach(|| {
+        out.par_chunks_mut(16)
+            .zip(bs.par_iter())
+            .zip(ds.par_iter())
+            .for_each(|((o, b), d)| {
+                let h = crate::polarizance::diff_mueller_matrix(b, d);
+                for i in 0..4 {
+                    for j in 0..4 {
+                        o[i * 4 + j] = h[i][j];
+                    }
+                }
+            });
+    });
+    Ok(out)
+}
+
+/// Bulk Mueller from differential data: exp(-absorbance·L)·expm(H·L).
+/// b/d: [n*3]; absorbance/length: [n] (totals per row; broadcast in Python).
+#[pyfunction]
+#[pyo3(name = "mueller_from_diff")]
+pub fn mueller_from_diff_py(
+    py: Python<'_>,
+    b_flat: PyReadonlyArray1<f64>,
+    d_flat: PyReadonlyArray1<f64>,
+    absorbance: PyReadonlyArray1<f64>,
+    length: PyReadonlyArray1<f64>,
+) -> PyResult<Vec<f64>> {
+    let bs = read_vec3_batch(b_flat.as_slice()?, "b")?;
+    let ds = read_vec3_batch(d_flat.as_slice()?, "d")?;
+    let ab = absorbance.as_slice()?;
+    let ls = length.as_slice()?;
+    let n = bs.len();
+    if ds.len() != n || ab.len() != n || ls.len() != n {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "b/d/absorbance/length batches must have equal lengths",
+        ));
+    }
+    let mut out = vec![0.0_f64; n * 16];
+    py.detach(|| {
+        out.par_chunks_mut(16)
+            .zip(bs.par_iter())
+            .zip(ds.par_iter())
+            .zip(ab.par_iter())
+            .zip(ls.par_iter())
+            .for_each(|((((o, b), d), a), l)| {
+                let m = crate::polarizance::mueller_from_diff(b, d, *a, *l);
+                for i in 0..4 {
+                    for j in 0..4 {
+                        o[i * 4 + j] = m[i][j];
+                    }
+                }
+            });
+    });
+    Ok(out)
+}
+
+/// Route B: bulk differential extraction at kx = 0 (general eigenpath).
+/// eps/rho/rhop/mu: [n*18] each; k0: [n]; thickness: [n].
+/// Returns (b[n*3], d[n*3], absorbance[n], jones_re[n*4], jones_im[n*4],
+/// n_failed) — NaN rows + count when the eigenbasis is degenerate/unclean.
+#[pyfunction]
+#[pyo3(name = "bulk_differential")]
+#[allow(clippy::type_complexity)]
+pub fn bulk_differential_py(
+    py: Python<'_>,
+    eps: PyReadonlyArray1<f64>,
+    rho: PyReadonlyArray1<f64>,
+    rhop: PyReadonlyArray1<f64>,
+    mu: PyReadonlyArray1<f64>,
+    k0: PyReadonlyArray1<f64>,
+    thickness: PyReadonlyArray1<f64>,
+) -> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, u32)> {
+    let es = read_tensor_batch(eps.as_slice()?)?;
+    let rs = read_tensor_batch(rho.as_slice()?)?;
+    let rps = read_tensor_batch(rhop.as_slice()?)?;
+    let mus = read_tensor_batch(mu.as_slice()?)?;
+    let ks = k0.as_slice()?;
+    let ts = thickness.as_slice()?;
+    let n = es.len();
+    if rs.len() != n || rps.len() != n || mus.len() != n || ks.len() != n || ts.len() != n {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "eps/rho/rhop/mu/k0/thickness batches must have equal lengths",
+        ));
+    }
+    let outs: Vec<Option<(BulkDiffOut, [[C; 2]; 2])>> = py.detach(|| {
+        es.par_iter()
+            .zip(rs.par_iter())
+            .zip(rps.par_iter())
+            .zip(mus.par_iter())
+            .zip(ks.par_iter())
+            .zip(ts.par_iter())
+            .map(
+                |(((((e, r), rp), m), k), t)| {
+                    crate::polarizance::bulk_differential(e, r, rp, m, *k, *t).map(|bd| {
+                        (
+                            BulkDiffOut {
+                                b: bd.b,
+                                d: bd.d,
+                                absorbance: bd.absorbance,
+                            },
+                            bd.jones,
+                        )
+                    })
+                },
+            )
+            .collect()
+    });
+    let mut b_out = vec![f64::NAN; n * 3];
+    let mut d_out = vec![f64::NAN; n * 3];
+    let mut ab_out = vec![f64::NAN; n];
+    let mut j_re = vec![f64::NAN; n * 4];
+    let mut j_im = vec![f64::NAN; n * 4];
+    let mut n_failed: u32 = 0;
+    for (k, o) in outs.iter().enumerate() {
+        if let Some((bd, j)) = o {
+            b_out[k * 3..k * 3 + 3].copy_from_slice(&bd.b);
+            d_out[k * 3..k * 3 + 3].copy_from_slice(&bd.d);
+            ab_out[k] = bd.absorbance;
+            for i in 0..2 {
+                for jj in 0..2 {
+                    j_re[k * 4 + i * 2 + jj] = j[i][jj].re;
+                    j_im[k * 4 + i * 2 + jj] = j[i][jj].im;
+                }
+            }
+        } else {
+            n_failed += 1;
+        }
+    }
+    Ok((b_out, d_out, ab_out, j_re, j_im, n_failed))
+}
+
+/// Composed stack product of slice-level differential Mueller matrices:
+/// M_total = M_{m-1}·…·M_0 (slice 0 first — light hits it first), each
+/// M_j = exp(-absorbance_j·t_j)·expm(H(b_j, d_j)·t_j).
+/// b/d: [(m*n)*3]; absorbance/thickness: [(m*n)]; n_slices = m >= 1.
+/// Returns flat [n*16] (the (n)-axis rows, wl-major like Route A/B).
+#[pyfunction]
+#[pyo3(name = "mueller_from_diff_stack_product")]
+pub fn mueller_from_diff_stack_product_py(
+    py: Python<'_>,
+    b_flat: PyReadonlyArray1<f64>,
+    d_flat: PyReadonlyArray1<f64>,
+    absorbance: PyReadonlyArray1<f64>,
+    thickness: PyReadonlyArray1<f64>,
+    n_slices: usize,
+) -> PyResult<Vec<f64>> {
+    if n_slices == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "n_slices must be >= 1",
+        ));
+    }
+    let bs = read_vec3_batch(b_flat.as_slice()?, "b")?;
+    let ds = read_vec3_batch(d_flat.as_slice()?, "d")?;
+    let ab = absorbance.as_slice()?;
+    let ts = thickness.as_slice()?;
+    let n = bs.len() / n_slices;
+    if n == 0
+        || ds.len() != bs.len()
+        || ab.len() != bs.len()
+        || ts.len() != bs.len()
+        || bs.len() % n_slices != 0
+    {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "b/d/absorbance/thickness must have m*n equal lengths (m = n_slices)",
+        ));
+    }
+    let mut out = vec![0.0_f64; n * 16];
+    py.detach(|| {
+        out.par_chunks_mut(16).enumerate().for_each(|(row, o)| {
+            let mut acc = [[0.0_f64; 4]; 4];
+            let mut have = false;
+            for s in (0..n_slices).rev() {
+                let idx = s * n + row;
+                let m = crate::polarizance::mueller_from_diff(
+                    &bs[idx], &ds[idx], ab[idx], ts[idx],
+                );
+                if have {
+                    // acc = m · acc  (slice s sits to the LEFT of later slices)
+                    let mut nx = [[0.0_f64; 4]; 4];
+                    for i in 0..4 {
+                        for j in 0..4 {
+                            let mut a = 0.0;
+                            for kk in 0..4 {
+                                a += m[i][kk] * acc[kk][j];
+                            }
+                            nx[i][j] = a;
+                        }
+                    }
+                    acc = nx;
+                } else {
+                    acc = m;
+                    have = true;
+                }
+            }
+            for i in 0..4 {
+                for j in 0..4 {
+                    o[i * 4 + j] = acc[i][j];
+                }
+            }
+        });
+    });
+    Ok(out)
+}

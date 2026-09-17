@@ -197,6 +197,37 @@ for the derivations and gate values):
   normalization (`n± = n±κ`); feeds `kappa_table`/Table interpolation,
   γ>0 gives complex κ for the tensor path.
 
+### Differential Mueller calculus (Brown / POLARIZANCE v2)
+
+Material-level forward model (Phase 11): the *differential Mueller-matrix
+formalism* — `dM/dz = H·M`, `M = exp(−absorbance·L)·expm(H·L)` for a
+homogeneous element — plus Brown's (1999, DOI 10.1117/12.366361) polarizance
+parameters, matched to live BerreMueller's POLARIZANCE model (the SI of
+arXiv:2208.14461). Two routes produce the same per-unit-length differentials:
+
+```python
+lo = bl.linear_optics(eps, wavelengths_nm=WL)   # Route A: live-compatible
+     # -> dict(ld, ldp, lb, lbp, absorbance_1, absorbance_2)
+     # (live's max-of-two-orientations absorbance hack is NOT applied;
+     #  both orientation sums are returned)
+
+bd = bl.bulk_differential(eps, rho, rhop, mu, wavelengths_nm, thickness_nm)
+     # Route B: general eigenpath at kx = 0 (chirality/MO/non-diagonal —
+     # what live's elementwise sqrt(eps) cannot express)
+     # -> dict(b=(n,3), d=(n,3), absorbance=(n,), jones=(n,2,2))
+
+M = bl.mueller_from_diff(bd["b"], bd["d"], bd["absorbance"], L)   # expm path
+h = bl.diff_mueller_matrix(b, d)                                 # generator
+a = bl.brown_params(r_p, i_p, n_p, L)               # Brown a0..a3 (live forms)
+M = bl.mueller_from_diff_stack_product(b, d, abs_, t, n_slices)  # z-resolved
+```
+
+Gates G17 (`tests/test_polarizance.py`): Route B expm vs the Jones group
+path 1.7e-15; vs the full solver with the per-axis Airy interface correction
+9.8e-16; Route A vs live exact to ~2e-16 (transcription-identical formulas);
+Brown small-L Taylor structure (SI S10–S11) 1e-15-class; twisted-staircase
+Trotter convergence ×4.0 per halving (O(1/n²) midpoint rate).
+
 ### Mueller-matrix post-processing
 
 Elementwise over the solved `M_refl`/`M_trans` grids (`(...,4,4)` in,

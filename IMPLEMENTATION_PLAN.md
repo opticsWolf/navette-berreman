@@ -29,6 +29,7 @@ machine-precision gates the crate already holds (≈ 1e-15 vs both references).
 | 8 | Roughness correctness (type-5 fix, Route-2 cover) | Navette `code_review.md` §3.2; smatrix `coherent_block.rs` | `roughness.rs`, `berreman.py`, `tests/` | S |
 | 9 | Materials (dispersion → tensors, Rust + Python) | Navette `materials/` (Rust kernels + `materials/__init__.py`) | new `materials.rs` + bindings | M |
 | 10 | Chiral media (Pasteur constitutive + cholesteric Bragg) | pyllama `full_berreman` (mapping); B44 `TwistedMaterial` | `berreman.py`, `tests/` | M |
+| 11 | POLARIZANCE v2 (Brown differential Mueller) | BerreMueller `mueller.py` POLARIZANCE/Brown; arXiv:2208.14461 SI | new `polarizance.rs` + batched bindings | M |
 
 > Scope note: twisted/cholesteric stack builders, dispersion interpolation,
 > Ψ/Δ ellipsometry are **pure-Python** helpers on top of `BerremanStack` and are
@@ -4078,7 +4079,7 @@ at O(x) — the known parameterization inequivalence Cho argues; one more
 reason κ/Pasteur is canonical (§10.7). Physical rotation = k₀κd;
 arg(t_R)−arg(t_L) = 2k₀κd (half-ratio is the rotation).
 
-## Phase 11 (PLANNED) — POLARIZANCE v2: Brown differential Mueller decomposition
+## Phase 11 (AS-BUILT) — POLARIZANCE v2: Brown differential Mueller decomposition
 
 Status: **detailed plan written, not yet implemented.** Grounded in the
 live source (spike below) and the primary literature (SI extracted this
@@ -4197,28 +4198,58 @@ eig4/cluster machinery) and derive the differential generator from them
 (post-architecture-review pattern); Python owns validation, shapes,
 warnings — same contract as the Mueller post-ops refactor.
 
-### 11.3 Gates G17 (`tests/test_polarizance.py`, analytic-only + live oracle)
+### 11.3 Gates G17 — AS-BUILT (`tests/test_polarizance.py`, all green)
 
-- **G17a (cross-formalism, the strong gate):** uniform birefringent +
-  dichroic slab — `mueller_from_diff` (expm of the generator) vs OUR full
-  4×4 Berreman `M_trans` for identical optical constants. Machine-precision
-  class (both are exact propagations of the same constitutive relations;
-  basis mapping validated, not assumed). Fixture: diagonal ε with distinct
-  n_x, n_y (+ loss), plus a (rho, rhop) Pasteur variant where live cannot
-  follow.
-- **G17b (live oracle):** Route-A LD/LB/absorbance and `brown_params` vs
-  live `linear_optics_from_dielectric_tensor` + `brown_params` on shared
-  diagonal fixtures (~1e-6 class, live complex64); the two-orientation
-  absorbance values compared independently.
-- **G17c (reductions):** isotropic layer → β = d = 0, p_m real scalar,
-  a-params reduce to the pure-absorption exponential; consistency with the
-  v1 `polarizance`/`diattenuation` vectors on the final M.
-- **G17d (z-resolution):** twisted-stack staircase of per-slice (β, d) —
-  `mueller_from_diff` per slice composed vs our `twisted_stack` solve;
-  G15d-style slice-convergence triple (12/24/48 → monotone).
-- **G17e (optional, SI consistency):** Brown B₀/B₁ vs the SI's second-order
-  relations (S10–S11) for small pathlengths — pins the formalism's own
-  approximation structure.
+Implemented as planned, with two refinements forced by the numerics
+(recorded so the ladder stays honest):
+
+1. **G17a2's interface correction is the FULL Fabry–Pérot decomposition:**
+   the solver's `J_trans` for a single diagonal layer = diag(T_int·e^{ip}/D)
+   per axis (G16a2-validated Airy structure); the single-pass BULK propagator
+   = J_trans·D/T_int (drops the interface product AND the FP denominator,
+   keeps the bulk phase). Dividing the whole Airy out (first attempt) also
+   removed the bulk phase and collapsed to I — caught by the gate, fixed.
+2. **The generator-map gate is Richardson-based:** the differential
+   generator = d/dε mueller_from_jones(I + εk)|₀ via a FORWARD finite
+   difference (Richardson 2·f(ε/2) − f(ε), not the central-difference
+   (4f₂−f₁)/3 form — same class of slip, same lesson).
+
+**Measured pins (this session, all gates green):**
+
+- **G17a** expm-vs-Jones-path (same eigen data, 3 fixtures): worst
+  **1.706e-15**.
+- **G17a2** vs the full solver with the Airy correction (3 fixtures incl.
+  n_entry=1.5/n_exit=1.2): worst **9.778e-16**. Plus the Pasteur (ρ,ρ′)
+  chirality extension: expm == Jones at machine precision and the circular
+  slot |b₂| = 2k₀κ exactly (the Stokes rotation rate = the eigenphase
+  difference 2k₀κ; the Jones polarization itself rotates at k₀κ — the G16d
+  factor of 2, now measured through the generator).
+- **G17b** Route A vs live BerreMueller (`linear_optics_from_dielectric_tensor`
+  + `brown_params`, shared diagonal fixtures, length_over_c = 1): ld rel
+  ≤ **1.99e-16**, ldp/lb/lbp = **0.0 exact**, both absorbance orientation sums
+  rel ≤ 1.99e-16, brown_params a₀..a₃ = **0.0 exact**, live's max() ==
+  max(ours) = **0.0**. (Live's complex128 path — our float64 formulas are
+  transcription-identical, not 1e-6-class as first assumed.)
+- **G17c** reductions all green: isotropic → (b,d) = 0 with
+  absorbance = 2k₀·Im(n); mueller_from_diff = exp(−abs·L)·I; jones =
+  e^{ik₀nL}·I; pure retarder orthogonal (2.2e-16) with v1
+  polarizance/diattenuation = 0; pure dichroic = the textbook
+  [[cosh,sinh],[sinh,cosh]] chain (1e-14); diff_matrix placement ==
+  live transcription (0.0).
+- **G17d** twisted staircase (uniaxial, quarter-turn twist, midpoint grid):
+  Trotter self-convergence r(n→2n) = **1.0519e-3 → 2.6248e-4 → 6.5589e-5**
+  (ratios ×4.008, ×4.001 — the textbook O(1/n²) midpoint rate ✓). Solver
+  difference (staircase vs `twisted_stack` M_trans, same n-slice discreti-
+  zation): 0.16941 → 0.17010 → 0.17027 → 0.17031 — dominated by the FIXED
+  outer-interface factor (converging ~0.17032), successive differences
+  6.878e-4 → 1.722e-4 → 4.308e-5 (÷4.0 each ✓ O(1/n) stabilization).
+  Documented as a stabilization gate, NOT machine precision — the outer
+  interfaces are genuine physics the bulk differential formalism does not
+  model (consistent with the G17a2 lesson).
+- **G17e** brown_params small-L Taylor structure through the Python
+  wrapper (SI S10–S11): a₀ = 1 + O(L⁴) (the L² term cancels in the
+  cross-pairing), a₁ = L²/2, a₂ = L − L³(R²−I²)/6, a₃ = −RI·L³/6 — all
+  1e-12/1e-15 class ✓. Also pinned in Rust (same test bodies).
 
 ### 11.4 Convention traps (decided up front)
 
@@ -4234,11 +4265,13 @@ warnings — same contract as the Mueller post-ops refactor.
    (b, d) into one complex vector — keep our API explicit (separate (β, d)
    vectors), no silent mixing.
 
-### 11.5 Acceptance checklist
+### 11.5 Acceptance checklist — DONE
 
-Copy Appendix C checklist; gates G17a–e green; live-reference output pasted
-for G17b; README section + plan status row updated; no new crate deps
-(reuses mat4_expm); batched bindings only (no per-row Python loops).
+All items closed: gates G17a–e green (pins above); live-reference values
+measured and recorded in 11.3; README section added; plan status row added;
+no new crate deps (reuses `mat4_expm`); batched bindings only (Rayon, one
+call per array); the shared A-basis refactor in `transfer.rs` keeps
+`mueller_from_jones` bit-identical (G11a re-run unchanged).
 
 ## Appendix A — Upstream reference index (stable pointers)
 

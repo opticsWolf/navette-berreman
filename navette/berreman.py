@@ -48,6 +48,13 @@ try:
         polarizance as _rs_pol,
         circular_dichroism as _rs_cd,
         cloude as _rs_cloude,
+        linear_optics_scalar as _rs_linear_optics,
+        polarizance_decompose as _rs_pol_decompose,
+        brown_params as _rs_brown_params,
+        diff_mueller_matrix as _rs_diff_matrix,
+        mueller_from_diff as _rs_mueller_from_diff,
+        bulk_differential as _rs_bulk_differential,
+        mueller_from_diff_stack_product as _rs_diff_stack_product,
         grade_interface_tensors as _rs_grade_tensors,
         twisted_tensors as _rs_twisted_tensors,
         pasteur_tensors as _rs_pasteur_tensors,
@@ -68,6 +75,13 @@ except ImportError:  # pragma: no cover - allow flat-module import too
         polarizance as _rs_pol,
         circular_dichroism as _rs_cd,
         cloude as _rs_cloude,
+        linear_optics_scalar as _rs_linear_optics,
+        polarizance_decompose as _rs_pol_decompose,
+        brown_params as _rs_brown_params,
+        diff_mueller_matrix as _rs_diff_matrix,
+        mueller_from_diff as _rs_mueller_from_diff,
+        bulk_differential as _rs_bulk_differential,
+        mueller_from_diff_stack_product as _rs_diff_stack_product,
         grade_interface_tensors as _rs_grade_tensors,
         twisted_tensors as _rs_twisted_tensors,
         pasteur_tensors as _rs_pasteur_tensors,
@@ -454,6 +468,211 @@ def cloude(M):
     lam, ent = _rs_cloude(flat.reshape(-1))
     return {"lambda": np.asarray(lam, dtype=float).reshape(sh + (4,)),
             "entropy": np.asarray(ent, dtype=float).reshape(sh)}
+
+
+# ── Phase 11: POLARIZANCE v2 (Brown differential Mueller decomposition) ────
+
+def _tensor_batch_flat(eps) -> np.ndarray:
+    """(n,3,3)-or-(3,3) complex tensor stack -> [n*18] interleaved (re,im)."""
+    a = np.asarray(eps, dtype=complex)
+    if a.shape == (3, 3):
+        a = a[np.newaxis, ...]
+    if a.ndim != 3 or a.shape[1:] != (3, 3):
+        raise ValueError(f"tensor must have shape (n,3,3) or (3,3), got {a.shape}")
+    n = a.shape[0]
+    out = np.empty((n, 18), dtype=float)
+    out[:, 0::2] = a.real.reshape(n, 9)
+    out[:, 1::2] = a.imag.reshape(n, 9)
+    return out.reshape(-1)
+
+
+def _vec3_batch_flat(v, name) -> np.ndarray:
+    """(n,3) or (3,) float vector stack -> [n*3] contiguous."""
+    a = np.asarray(v, dtype=float)
+    if a.shape == (3,):
+        a = a[np.newaxis, ...]
+    if a.ndim != 2 or a.shape[1] != 3:
+        raise ValueError(f"{name} must have shape (n,3) or (3,), got {a.shape}")
+    return np.ascontiguousarray(a.reshape(-1))
+
+
+def _broadcast1(x, n, name) -> np.ndarray:
+    arr = np.asarray(x, dtype=float)
+    if arr.size == 1:
+        arr = np.full(n, float(arr.reshape(-1)[0]))
+    if arr.size != n:
+        raise ValueError(f"{name} must be scalar or length {n}, got {arr.size}")
+    return np.ascontiguousarray(arr.reshape(-1))
+
+
+def linear_optics(eps, wavelengths_nm=None, omega_rad_s=None,
+                  length_over_c: float = 1.0) -> dict:
+    """Route A: live-BerreMueller-compatible linear-optics spectra (Phase 11).
+
+    Replicates ``berremueller.dielectric_tensor.linear_optics_from_dielectric_tensor``
+    exactly: elementwise ``n = sqrt(eps)`` (exact only for diagonal eps in the
+    x/y measurement basis), prime tensor ``eps' = R(-45 deg)·eps·R(+45 deg)``,
+    ``ld = -(Im n_yy - Im n_xx)·omega·length_over_c`` (ld'/lb/lbp' likewise).
+
+    Parameters
+    ----------
+    eps : (n,3,3) or (3,3) complex permittivity tensor stack.
+    wavelengths_nm : spectrum (omega = 2*pi*c0/lambda computed for you).
+    omega_rad_s : explicit angular frequency (same unit system as eps).
+    length_over_c : live's unit-scaling knob (L/c0 for a physical length;
+    default 1.0 = per-unit-length differentials).
+
+    Returns dict(ld, ldp, lb, lbp, absorbance_1, absorbance_2) — each (n,).
+    NOTE: live's ``absorbance = max(v1, v2)`` stability hack is NOT inherited;
+    both orientation sums are returned and the caller chooses (plan §11.4).
+    """
+    eps_flat = _tensor_batch_flat(eps)
+    n = eps_flat.size // 18
+    if omega_rad_s is None:
+        if wavelengths_nm is None:
+            raise ValueError("give wavelengths_nm or omega_rad_s")
+        omega = 2 * np.pi * _C0_NM_S / np.asarray(wavelengths_nm, dtype=float)
+    else:
+        omega = np.asarray(omega_rad_s, dtype=float)
+    if omega.size == 1 and n != 1:
+        omega = np.full(n, float(omega.reshape(-1)[0]))
+    if omega.size != n:
+        raise ValueError(f"spectrum length {omega.size} != eps batch {n}")
+    ld, ldp, lb, lbp, a1, a2 = _rs_linear_optics(eps_flat, omega, float(length_over_c))
+    return {
+        "ld": np.asarray(ld, dtype=float),
+        "ldp": np.asarray(ldp, dtype=float),
+        "lb": np.asarray(lb, dtype=float),
+        "lbp": np.asarray(lbp, dtype=float),
+        "absorbance_1": np.asarray(a1, dtype=float),
+        "absorbance_2": np.asarray(a2, dtype=float),
+    }
+
+
+def polarizance_decompose(b, d) -> dict:
+    """Brown polarizance decomposition (Phase 11, live `decompose_polarizance`):
+    p = b + i·d (no conjugation), p_m = sqrt(p·p); returns dict(r_p, i_p, n_p)
+    with n_p = sqrt(r_p² + i_p²) = |p_m|. Shapes: (...,3) -> (...)."""
+    bs = _vec3_batch_flat(b, "b")
+    ds = _vec3_batch_flat(d, "d")
+    if bs.size != ds.size:
+        raise ValueError(f"b {bs.size} != d {ds.size}")
+    r, i, n_p = _rs_pol_decompose(bs, ds)
+    n = bs.size // 3
+    return {"r_p": np.asarray(r, dtype=float).reshape(n),
+            "i_p": np.asarray(i, dtype=float).reshape(n),
+            "n_p": np.asarray(n_p, dtype=float).reshape(n)}
+
+
+def brown_params(r_p, i_p, n_p, length=1.0) -> dict:
+    """Brown 1999 a0..a3 closed forms (live `brown_params` formulas exactly).
+
+    r_p/i_p/n_p/length: scalars or equal-length arrays (broadcast). n_p == 0
+    rows yield NaN quadruples (live yields NaN silently; the pure-absorption
+    limit is the a-params' L->0 behaviour, documented, not gated)."""
+    rp = np.asarray(r_p, dtype=float)
+    ip = np.asarray(i_p, dtype=float)
+    npv = np.asarray(n_p, dtype=float)
+    ln = np.asarray(length, dtype=float)
+    n = max(rp.size, ip.size, npv.size, ln.size)
+    rp = _broadcast1(rp, n, "r_p")
+    ip = _broadcast1(ip, n, "i_p")
+    npv = _broadcast1(npv, n, "n_p")
+    ln = _broadcast1(ln, n, "length")
+    a0, a1, a2, a3 = _rs_brown_params(rp, ip, npv, ln)
+    return {"a0": np.asarray(a0, dtype=float), "a1": np.asarray(a1, dtype=float),
+            "a2": np.asarray(a2, dtype=float), "a3": np.asarray(a3, dtype=float)}
+
+
+def diff_mueller_matrix(b, d) -> np.ndarray:
+    """Differential Mueller generator H(b, d) over (...,3) vectors -> (...,4,4).
+
+    Live `POLARIZANCE.diff_matrix()` placement exactly (traceless; the circular
+    slots (b[2], d[2]) carry CB/CD and are zero in Route A)."""
+    bs = _vec3_batch_flat(b, "b")
+    ds = _vec3_batch_flat(d, "d")
+    if bs.size != ds.size:
+        raise ValueError(f"b {bs.size} != d {ds.size}")
+    flat = _rs_diff_matrix(bs, ds)
+    n = bs.size // 3
+    return np.asarray(flat, dtype=float).reshape(n, 4, 4)
+
+
+def mueller_from_diff(b, d, absorbance, length) -> np.ndarray:
+    """Bulk Mueller matrix M = exp(-absorbance·L)·expm(H(b,d)·L) -> (...,4,4).
+
+    b/d: (...,3); absorbance/length: scalars or (...,) (broadcast); per row."""
+    bs = _vec3_batch_flat(b, "b")
+    ds = _vec3_batch_flat(d, "d")
+    n = bs.size // 3
+    ab = _broadcast1(absorbance, n, "absorbance")
+    ln = _broadcast1(length, n, "length")
+    return np.asarray(
+        _rs_mueller_from_diff(bs, ds, ab, ln), dtype=float
+    ).reshape(n, 4, 4)
+
+
+def bulk_differential(eps, rho, rhop, mu, wavelengths_nm, thickness_nm) -> dict:
+    """Route B: bulk differential extraction at kx = 0 (Phase 11, general).
+
+    Takes full tensor sets (eps, rho, rhop, mu) per wavelength (n,3,3) or
+    (3,3), the spectrum wavelengths_nm, and a physical thickness (nm).
+    Returns dict(b=(n,3), d=(n,3), absorbance=(n,) isotropic loss per unit
+    length, jones=(n,2,2) bulk Jones propagator, n_failed=int) — NaN rows +
+    count where the eigenbasis is degenerate (e.g. z-uniaxial at normal
+    incidence; documented limitation, plan §11.2).
+    """
+    es = _tensor_batch_flat(eps)
+    rs = _tensor_batch_flat(rho)
+    rps = _tensor_batch_flat(rhop)
+    mus = _tensor_batch_flat(mu)
+    n = es.size // 18
+    wl = np.broadcast_to(np.asarray(wavelengths_nm, dtype=float), (n,))
+    k0 = 2 * np.pi / np.asarray(wl, dtype=float)
+    ts = _broadcast1(thickness_nm, n, "thickness_nm")
+    b, d, ab, jre, jim, n_failed = _rs_bulk_differential(es, rs, rps, mus, k0, ts)
+    out = {
+        "b": np.asarray(b, dtype=float).reshape(n, 3),
+        "d": np.asarray(d, dtype=float).reshape(n, 3),
+        "absorbance": np.asarray(ab, dtype=float).reshape(n),
+        "n_failed": int(n_failed),
+    }
+    jj = np.empty((n, 2, 2), dtype=complex)
+    jj.real = np.asarray(jre, dtype=float).reshape(n, 2, 2)
+    jj.imag = np.asarray(jim, dtype=float).reshape(n, 2, 2)
+    out["jones"] = jj
+    return out
+
+
+def mueller_from_diff_stack_product(b, d, absorbance, thickness,
+                                    n_slices: int) -> np.ndarray:
+    """Composed slice stack product (Phase 11): M_total = M_{m-1}·…·M_0
+    (slice 0 first — light hits it first), each M_j = exp(-absorbance_j·t_j)·
+    expm(H(b_j, d_j)·t_j). b/d: (m,n,3); absorbance/thickness: (m,n);
+    returns (n,4,4)."""
+    bs = np.asarray(b, dtype=float)
+    ds = np.asarray(d, dtype=float)
+    ab = np.asarray(absorbance, dtype=float)
+    ts = np.asarray(thickness, dtype=float)
+    m = int(n_slices)
+    if m < 1:
+        raise ValueError("n_slices must be >= 1")
+    if bs.shape[-1] != 3 or ds.shape != bs.shape:
+        raise ValueError(f"b/d must have shape (...,3), got {bs.shape}")
+    if ab.shape != bs.shape[:-1] or ts.shape != bs.shape[:-1]:
+        raise ValueError(
+            f"absorbance/thickness must have shape {bs.shape[:-1]}, "
+            f"got {ab.shape} / {ts.shape}"
+        )
+    n = bs.size // (m * 3)
+    flat = _rs_diff_stack_product(
+        np.ascontiguousarray(bs.reshape(-1, 3)).reshape(-1),
+        np.ascontiguousarray(ds.reshape(-1, 3)).reshape(-1),
+        np.ascontiguousarray(ab.reshape(-1)),
+        np.ascontiguousarray(ts.reshape(-1)),
+        m,
+    )
+    return np.asarray(flat, dtype=float).reshape(n, 4, 4)
 
 
 def _rot_apply(rs_fn, *angle_args, eps) -> np.ndarray:

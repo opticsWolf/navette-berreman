@@ -359,14 +359,7 @@ pub fn jones_to_circular(j: &Jones) -> Jones {
 /// Mueller matrix (4x4, returned complex; imaginary parts are ~0) from a 2x2
 /// Jones matrix. `berreman_mueller.mueller_from_jones_matrix`.
 pub fn mueller_from_jones(j: &Mat2) -> Mat4 {
-    let s = 1.0 / 2.0_f64.sqrt();
-    let a: Mat4 = [
-        [c(s, 0.0), czero(), czero(), c(s, 0.0)],
-        [c(s, 0.0), czero(), czero(), c(-s, 0.0)],
-        [czero(), c(s, 0.0), c(s, 0.0), czero()],
-        [czero(), c(0.0, s), c(0.0, -s), czero()],
-    ];
-    let ainv = mat4_inv(&a).unwrap();
+    let (a, ainv) = mueller_a_basis();
     // kron(J, conj(J)): 4x4
     let mut k = [[czero(); 4]; 4];
     for i in 0..2 {
@@ -380,6 +373,22 @@ pub fn mueller_from_jones(j: &Mat2) -> Mat4 {
     }
     let ak = mat4_mul(&a, &k);
     mat4_mul(&ak, &ainv)
+}
+
+/// The Stokes-basis A matrix of `mueller_from_jones` (1/√2 factors,
+/// `berreman_mueller.py:156-160`) and its inverse — shared with the Phase-11
+/// differential generator (`polarizance.rs`), which is its infinitesimal form
+/// (same A ⇒ the two formalisms are anchored to one basis).
+pub(crate) fn mueller_a_basis() -> (Mat4, Mat4) {
+    let s = 1.0 / 2.0_f64.sqrt();
+    let a: Mat4 = [
+        [c(s, 0.0), czero(), czero(), c(s, 0.0)],
+        [c(s, 0.0), czero(), czero(), c(-s, 0.0)],
+        [czero(), c(s, 0.0), c(s, 0.0), czero()],
+        [czero(), c(0.0, s), c(0.0, -s), czero()],
+    ];
+    let ainv = mat4_inv(&a).unwrap();
+    (a, ainv)
 }
 
 // ───────────────────────── full stack solve ─────────────────────────────
