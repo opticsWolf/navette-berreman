@@ -1,0 +1,1246 @@
+## Supporting Information for “Chiral polaritonics
+
+based on achiral Fabry-P´erot cavities using apparent circular dichroism”
+Andrew H. Salij, Randall H. Goldsmith, and Roel Tempelaar
+
+Department of Chemistry, Northwestern University, 2145 Sheridan Road, Evanston,
+
+Illinois 60208, USA
+
+Department of Chemistry, University of Wisconsin-Madison, Madison, WI 53706-1322,
+
+USA
+
+E-mail: [roel.tempelaar@northwestern.edu](mailto:roel.tempelaar@northwestern.edu)
+
+## Contents
+
+S1 Notes on Conventions
+
+S2
+
+S2 Infinite-Order Mueller Calculus
+
+S2
+
+S3 ACD Mueller Matrix Disymmetry
+
+S5
+
+S4 Derivations
+
+S8
+
+S4.1 Interaction Hamiltonian . . . . . . . . . . . . . . . . . . . . . . . . . . . . . S8
+
+S4.2 Apparent Circular Dichroism . . . . . . . . . . . . . . . . . . . . . . . . . . . S11
+
+S4.3 Polaritonic Characteristics . . . . . . . . . . . . . . . . . . . . . . . . . . . . S14
+
+References
+
+S16
+
+S1
+
+---
+
+S1 Notes on Conventions
+
+This paper reports on interdisciplinary work spanning chemistry, classical optics, and quan-
+
+tum optics, which differ in their conventions with regards to circular polarizations and to
+
+circular dichroism. Bearing this in mind, we keep with the convention standard to Mueller
+
+calculus, considering polarization from the perspective of a receiver. This means that the
+
+electric field of right-handed polarization (r) can be expressed as Er
+
+Er iEx Ey and the complex conjugate of this for left-handed polarization (
+
+Generally, chiroptical response is defined as l minus r, which is the opposite of the intensi-
+
+ties of the element of the Stokes vector corresponding to circular polarization (
+
+Supporting Information (SI), we invoke the latter for the Mueller calculus, as doing so main-
+
+tains a consistent treatment of sign for all forms of dichroism demonstrating Lorentz group
+
+symmetries, but the direct handling of apparent circular dichroism (ACD) and the main text
+
+switches to the former for consistency with the main body of spectroscopy literature.
+
+S2 Infinite-Order Mueller Calculus
+
+The Stokes vector presents a natural manner to characterize polarized light. For a plane-wave
+
+electric field propagating in the z-direction as E
+
+s
+
+E 0
+
+E eiδx x
+
+E ey iδy 2 E2
+
+x y
+
+s
+
+E2 1
+
+x S s2 2E Ex
+
+s3 2E Ex
+
+with the phase difference δ δy δx. In order, the Stokes parameters appearing in this
+
+column vector correspond to total light intensity, x
+
+S2
+
+E2y
+
+ycosδ
+
+ysinδ
+
+y intensity differences,
+
+Ex iEy or as
+
+l
+
+s3). In this (S1)
+
+x y intensity
+
+---
+
+differences where x is the bisector of the
+
+from x , and circular polarization (RHP minus LHP) differences. Any observed polarization
+
+denoted Sf may be given by a linear transformation by a sample as
+
+the macroscopic Mueller matrix of the sample and
+
+For a homogenous sample, M
+
+may rewrite the differential matrix as
+
+B and D relate the differential birefringence and dichroism, respectively.
+
+may be factored out as it is diagonal, leaving one with 6 unique polarization characteristics.
+
+The Lie algebras of birefrigence and dichroism are given by 0 0
+
+0 0
+
+B 0 β3 0 β2
+
+where β ≡ {β , β , β and d 1 2 3
+
+prime (x y ), and circular (r 2 2
+
+B and D, the algebra of the SO
+
+Treating the anisotropic aspects of the Mueller matrix according to their Lorentz group
+
+symmetries and letting the entire pathlength in the
+
+shown 2,3 that the macroscopic Mueller matrix to infinite order is
+
+M = exp **H** l e αlm e αl
+
+relates to its derivative
+
+H 0 0
+
+β3 β 0 β1
+
+β1 0
+
+d , d , d 1 2 3
+
+l) birefringence and dichroism, respectively. Combining both
+
+(1 3), meaning the restricted Lorentz group, is constructed.
+
+B0I B1
+
+x and y axes and y is at a 90 - clockwise rotation
+
+S0 the intial polarization.
+
+H
+
+αI B D where α 0
+
+Sf MS0, where M is
+
+d M by M e **H** z 1 One
+
+dz
+
+¯ is the mean absorption and 1 Mean absorption
+
+d1 d2 d3 2
+
+are composed of differential linear (
+
+B D 2
+
+S3
+
+d 0 0 0 1 D d2 0 0 0
+
+d3 0 0 0
+
+z-direction be l, it has been previously 4
+
+B2 B D B3 D
+
+y x ), linear 2
+
+B BD (S2)
+
+---
+
+where 0
+
+β1 DB β2
+
+β3
+
+are the incorporations of the dichroism and birefringence vectors onto the generators of bire-
+
+fringence and dichroism, respectively, and
+
+as
+
+with
+
+Here, N is the norm of and q scalar p β id β
+
+are constants, the oscillatory behavior of it for increasing pathlength is manifest. Here, we
+
+will also motivate the approximations
+
+β β β
+
+₁ ₂ 3 0 0 0
+
+0 0 0
+
+0 0 0
+
+R B0 = ( 2 N
+
+B1 = (
+
+1 B2 = ( N
+
+1 B3 = ( N
+
+N = (β
+
+I
+
+R
+
+R and I are the real and imaginary components of a complex
+
+id) = R Ii 0 0 0 0
+
+0 0 d d
+
+3
+
+2 BD
+
+0 d3 0 d1
+
+0 d2 d1 0
+
+Bi are real-valued polarizance parameters defined
+
+I cosh(Il) + ( 2 cos(Rl N 1 2(cosh(Il cos(Rl N 2 R sin(Rl) + I sinh(Il
+
+2 I sin(Rl R sinh(Il
+
+2 2
+
+2
+
+d + 4(β d) )1 4 r 1 2 2
+
+N2 β d 2 r 1 2 2
+
+N2 β d 2
+
+. Looking at the expression for
+
+B0 1 and B1
+
+S4
+
+B1, as 1l2 for small pathlength 2
+
+(S3)
+
+(S4)
+
+(S5)
+
+(S6)
+
+(S7)
+
+(S8)
+
+(S9)
+
+N I, and R
+
+l, which
+
+---
+
+bring the Brown treatment of the Mueller calculus in line with expanding the differential
+
+Mueller matrix to the second order. For the former,
+
+R2 I2l2
+
+I2 R2l2 B0 (1
+
+O l4)) + (1 +
+
+O l4 N2 2
+
+N2 2 R2 I2 O l4 N2
+
+1
+
+(S10)
+
+For the latter,
+
+1 I2l2
+
+R2l2 B1 1 +
+
+O(4) (1
+
+O l4 N2 2
+
+2 I2 R2 l2 O l4 2N2
+
+1 l2
+
+(S11) 2
+
+S3 ACD Mueller Matrix Disymmetry
+
+In the main text, the polarization effects of mirrors are ignored due to the inversion anti-
+
+symmetry of ACD. Here, we justify why mirrors may be treated as reciprocal boundaries of
+
+a continuous medium in the case of ACD.
+
+Where there is a total absence of optical activity producing “genuine” circular dichroism,
+
+the differential Mueller matrix for forwards propagation in absence of mean absorption
+
+is
+
+HF
+
+HF 0 d d 0
+
+1 2
+
+d 0 0 β2 1
+
+(S12) d2 0 0 β1
+
+0 β2 β1 0
+
+S5
+
+---
+
+For backwards propagation, the
+
+backwards differential matrix is
+
+The macroscopic matrix for forwards propagation is
+
+B B d2 d2 0 ₁ 1 2
+
+B d2 1 B β3 1 mF
+
+B d2 2
+
+B1 βd1
+
+For backwards propagation, many signs are flipped, producing
+
+B B 0 1
+
+B d2 1 mB
+
+B d2 2
+
+B1 βd1 2
+
+B β3 2 2 βd2 1
+
+d2 d2 1 2
+
+B β B 3 1
+
+B β B 3 2
+
+βd2 1
+
+x y axes are interchanged in sign, implying that the 0 d1
+
+d 0 1 HB
+
+d2 0 0 β2
+
+B d2 1 B β3 1
+
+B0 B1 β2 d2 2 1
+
+B1 ββ1 2 dd1 2
+
+B β2 2 B d3 2
+
+B d B β 2 1 3 1
+
+0 B1 β2 d2
+
+2 1
+
+1 ββ dd B
+
+1 2 1 2
+
+B β B d 2 2 3 2
+
+S6
+
+d 02 0 β2
+
+(S13) 0 β1
+
+β1 0
+
+B d B β
+
+B βd βd 2 2 3 2
+
+₁ 1 2 2 1
+
+B1 ββ1 2 dd1 2 B β2 2 B d3 2
+
+B0 B1 β12 d22
+
+B β2 1 B d3 1
+
+B β2 1 B d3 1 B0 B1 β12 β22 (S14)
+
+B d B β
+
+B βd βd 2 2 3 2
+
+1 1 2 2 1
+
+B1 ββ dd
+
+B β B d 1 2 1 2
+
+2 2 3 2
+
+0 B1 β2 d2
+
+B β B d 1 2
+
+2 1 3 1
+
+B β B d B B β2 β2 2 1 3 1
+
+0 1 1 2
+
+(S15)
+
+---
+
+The action of a mirror on incident light normal to it is to preserve the
+
+flipping the x y and r l ones. In terms of the Mueller calculus,
+
+1 0 0 0
+
+0 1 0 0
+
+x y axes while
+
+MM 0 0
+
+The matrix product MMmBMM represents the process of reflecting light off a mirror,
+
+propagating it backwards through a homogenous sample, and then reflecting the light once
+
+again such that it propagates in the same direction as originally. Application of linear algebra
+
+demonstrates that
+
+MMmBMM
+
+B B d2 d2 0 1 1 2
+
+B d B β 2 1 3 1
+
+B d B β 2 2 3 2
+
+B1 βd βd 1 2 2 1
+
+which is equal to mF, demonstrating that this combination of transformations is the same
+
+as that of forward propagation. That is, the entire cavity system may be considered as a
+
+continuous medium with reciprocal boundaries
+
+B d B β 2 1 3 1
+
+B0 B1 β2 d2 2 1
+
+B1 ββ dd 1 2 1 2
+
+B β B d 2 2 3 2
+
+S7 0 1 0
+
+0 0 1
+
+B d B β 2 2 3 2
+
+B1 ββ dd 1 2 1 2
+
+B0 B1 β2 d2 1 2
+
+B β B d 2 1 3 1
+
+owing to its unique symmetries.
+
+(S16)
+
+B βd βd 1 1 2 2 1
+
+B β B d 2 2 3 2
+
+B β B d 2 1 3 1
+
+B0 B1 β2 β2 1 2
+
+(S17)
+
+---
+
+S4 Derivations
+
+S4.1 Interaction Hamiltonian
+
+Let us first consider the case of normal absorption in the Coulomb gauge. Omitting the
+
+dipole self-energy, the classical light-matter interaction Hamiltonian of a single electron is
+
+e
+
+Hint
+
+A r, t ⃗p
+
+me
+
+where A is the light vector potential, which we assume takes the plane-wave form
+
+A r, t) = A0
+
+ϕ
+
+e iϕ eiϕ
+
+ωt kr
+
+A0,x A0 A0,y
+
+We will next take the long-wavelength approximation of A e iϕ 0
+
+will only consider the first term, the electric field-electric dipole interaction. Without loss
+
+of generality, we will only directly evaluate the contribution from
+
+identical for the other polarization term,
+
+e
+
+Hint
+
+A0,xpx eiϕ e iϕ me
+
+From here, we will only directly consider the first term, knowing that the latter is simply its
+
+complex conjugate. Furthermore, we will now directly consider the momentum as an operator
+
+pˆ. Since, for an electron e, the Heisenberg equation of motion implies that
+
+the action of pˆx transitioning from the electronic ground state 0 to excited state
+
+S8 5
+
+(S18)
+
+(S19)
+
+A0(1 ikr ...) and
+
+A0,x as the analysis is (S20)
+
+e ˆ
+
+pˆ im H ,rˆ ],
+
+x
+
+e x
+
+h
+
+n is given
+
+---
+
+as
+
+im
+
+im
+
+e ˆ
+
+ˆ
+
+e n pˆx 0
+
+n Hrˆxe rˆxHe 0
+
+En E0 n rˆx 0 imωe n n rˆx 0 (S21) h
+
+h
+
+Considering all polarizations, all excited-state transitions indexed by n, and both counter-
+
+rotating terms of the vector potential, the light-matter interaction Hamiltonian may be
+
+re-expressed as5
+
+X Hint
+
+iω An ⃗µn (S22)
+
+n
+
+where ⃗µ e⃗r, which is the electric dipole interaction in the same basis as the vector potential.
+
+Here, we write ⃗µn to refer specifically to the transition dipole from the ground state to state
+
+n as we have summed the interaction over multiple excited states. Omitting such indexing
+
+and as it is the electric dipole interaction with the electric field, this interaction is often
+
+written as E ⃗µ. For the case of a crystal, the dielectric tensor dressed by exciton states
+
+may also be expressed in terms of dipole projections on to the tensor axes, namely
+
+X 2 µn,iµn,j
+
+ϵij ω) = δij
+
+at k = 0 in the case of negligible spatial dispersion and where
+
+Adding to this expression, we make two alterations to account for isotropic high-frequency
+
+contributions to the dielectric given by
+
+ϵij ω) = ϵ δij
+
+hϵ0v ω2 n n
+
+ωn (S23) ω2
+
+v is the unit cell volume. 6
+
+ϵ and to account for damping, 6,7
+
+X 2
+
+µn,iµn,j ω .n (S24) hϵ0v ωn2 ω2 iγωn
+
+n
+
+S9
+
+---
+
+Along a transition axis, the dielectric contribution of a single exciton state to the
+
+component of the dielectric diagonal component along that axis is found to be 2µ2
+
+ϵi,n
+
+n ϵhv0
+
+In principle, this formulation of the dielectric should agree with one directly arising from
+
+Fermi’s Golden rule. That is, we can relate the transition rate Γ
+
+sorption α¯ = A/l, in turn related to a natural absorbance
+
+imaginary dielectric,
+
+ωωγn n ω2 ω2 2 γ2ω2
+
+n
+
+n
+
+⁸ A
+
+ωϵi,n
+
+hωΓn α¯ =
+
+nc
+
+where S 1 E B) is the time-averaged Poynting vector.
+
+2µ0
+
+wave, we will re-express said vector in terms of the vector potential in order to find the
+
+magnitude. That is, B
+
+A and E
+
+A0 , the absolute value of the vector potential, predominantly from now on and work with
+
+norms of complex quantities. Upon rearrangement and determination that
+
+non-magnetic materials, we find that 9
+
+S
+
+d A. For notational convenience, we will refer to dt 2¯hΓ
+
+ϵi,n
+
+n ω2ϵ A 0 0
+
+The transition rate of a given exciton transition is given as Γ
+
+here being the density of states due to damping. For the case of normal absorption, the
+
+light-matter interaction for a specific transition n H
+
+Hint,n ωµ A n n
+
+S10 2
+
+int,n, is already bounded, namely 0
+
+imaginary (S25)
+
+n to a characteristic ab-
+
+which was also related to the (S26)
+
+For the case of the plane
+
+n A
+
+S ω 2 0 2 for 2µc0
+
+(S27)
+
+n 2π Hint,n 2ρ hω), with ρ
+
+h̄
+
+(S28)
+
+---
+
+From comparison of the two forms of the dielectric, one obtains
+
+ω2
+
+ωωγn n A0 2ω2µ2ρ hω) = A0 2µ2 (S29)
+
+n n
+
+n2πhv ω2 ω2 2 γ2ω2
+
+n
+
+n
+
+which implies 1 ω2
+
+ωωγn n ρ hω) =
+
+(S30)
+
+2πhv ω2 ω2 ω2 2 γ2ω2
+
+n n
+
+n
+
+In effect, we are accounting for the broadening due to damping, which produces a Lorentzian
+
+density of states, 6,10 and thereby creates an effective width in line with previous polaritonic
+
+studies. 11 For this analysis, we will focus on purely electronic optical transitions and rein-
+
+troduce lineshapes where necessary.
+
+S4.2 Apparent Circular Dichroism
+
+For the case of ACD, we will be primarily considering characteristic absorption lengths. By
+
+definition, we have
+
+αl/r αavg αCD (S31)
+
+We should discuss briefly how these absorption lengths relate to the Mueller parameters. For
+
+a macroscopic matrix of the form M e αzm, the inverse lengths are: 1 αavg α log(m00
+
+(S32)
+
+l 1 αl/r α log(m00 m03 (S33) l
+
+As we are working in the case of relatively small pathlength, we introduce the following
+
+approximations to render the problem analyticaly tractable. For sufficiently small β and
+
+d compared to mean absorption, m00 1 and log(m00 m03 m00 1 m03 ≈ ±m03
+
+S11
+
+---
+
+enabling conflation of matrix elements with absorptions as
+
+αavg α (S34)
+
+αl αr αCD
+
+m03/l.
+
+(S35) 2
+
+This conflation is implied in standard second-order treatments of the Mueller matrix 12,13
+
+and is necessary to have a compact mathematical framework. Under these bounds and from
+
+previous analysis, 14 we know that
+
+ωϵi,n ω αn ω) =
+
+ωξµ2nω Vn n ω (S36) n ω c X B1 αCD,n
+
+ω2ξ2µ2 ωmWm ω µ2ω V ω sin(2β (S37)
+
+m
+
+n n n
+
+nm l
+
+m,n
+
+where ξ
+
+1 under the perturbative case. Here, n ω
+
+ϵ βnm βn βm
+
+h̄cϵ0 ϵ v
+
+where βi is the ith dipole angle from the x-axis, and B1 is the first of Brown’s polarizance
+
+parameters. 3 Therefore, circular absorption is given as
+
+X B1 α ωξµ2ω V 1
+
+ωξµ2 ω W sin(2β (S38)
+
+l/r,n
+
+n n n
+
+m m m
+
+nm l m 1 1 α = 2ωξµ2ω V
+
+σ (S39)
+
+l/r,n
+
+n n n
+
+n 2 2 X B1 σn
+
+ωξµ2 ωmWm sin(2βnm (S40) l m m
+
+with σn being the chiral interaction term. Relating this expression to an effective Fermi’s
+
+Golden Rule-type expression as in the previous subsection, we have 1 1
+
+2πµc0 α = 2ωξµ2ω V
+
+σn) = 2
+
+H 2ρ hω (S41)
+
+l/r,n
+
+n n n
+
+int,n,l/r 2 2
+
+ωn ω A0 2
+
+S12
+
+---
+
+where, we have separated the interaction Hamiltonian of state n over the polarization basis
+
+as Hint,n,l/r. Treating n ω ϵ , the above expression rearranges to 1 1 ω2 A₀ 2µ2ω Vn n
+
+σn) = 2πhv Hint,n,l/r 2ρ hω (S42)
+
+n 2 2
+
+Reintroducing ρ hω) = 1 ω2 Vn from (S30), the above simplifies to 2πh̄v ωn
+
+1 1 ω2 A0 2 µn 2
+
+σn) = Hint,n,l/r 2 (S43)
+
+n 2 2
+
+giving
+
+s X 1 1 B1 A0 ωµn n
+
+ωξµ2mωm 2 2 l m
+
+Note that in the case of linear absorption, this reduces to the same form as in the previous
+
+subsection but halved for each circular mode.
+
+To return to the interaction Hamiltonian as a quantum mechanical operator, the vector
+
+potential should be considered as an operator as well. In the general case of a quantized
+
+electromagnetic field, the vector potential may be discretized into photonic creation and
+
+annihilation operators in terms of the mode volume
+
+r X h
+
+Wm sin(2βnm) =
+
+V0 as
+
+A
+
+⃗eλ aˆλe iωt aˆ eiωt 2ϵωV
+
+λ 0 0 λ
+
+with the index plus(minus) labelled by λ referring to the polarization modes discussed in the
+
+main text, and where we have asserted that k ⃗r = 0 in the regime of interest. To further
+
+clarify, ⃗eλ is the λ polarization component of the unit vector of A
+
+interaction Hamiltonian acting on a collection of dipole two-level systems, one has, under
+
+S13
+
+Hint,n,l/r (S44)
+
+(S45)
+
+in the basis. For an
+
+---
+
+the dipole and rotating-wave approximations,
+
+with A0,λ being the absolute value of the component in direction q h ⃗eλ. For the case of ACD, we will introduce the indexing variable 2ϵω V0 λ 0
+
+positive for LHP and negative for RHP. This allows a full discretization of the Hamiltonian
+
+as
+
+with
+
+XX ˆHint i n λ
+
+XX ˆHint l) = i
+
+A n λ 15,16
+
+ˆ ˆ
+
+A0,λωµn n,λ(ˆa bn aˆλbn
+
+λ
+
+r 1
+
+ˆ ˆ 0,λωµ˜ (ˆa b aˆ b
+
+n n n λ n
+
+λ 2
+
+X B1 σn
+
+Ωξµ2 ωmWm(Ω) sin(2βnm
+
+m
+
+l
+
+m n
+
+This expression is what we use to numerically calulate the chiral interaction in the polaritonic
+
+calculations. Taking the approximation B1 1l2 for the short pathelength case, we have
+
+l 2
+
+X 1
+
+(2)
+
+λ of A. That is, A0,λ
+
+τλ 1 which is 1 τσ
+
+(S46)
+
+λ n 2 (S47)
+
+σn lξω µ2 ωmWm ω sin(2βnm 2
+
+m m n
+
+as discussed in the main text.
+
+S4.3 Polaritonic Characteristics
+
+From the main text, the polaritonic characteristic of a given superposition
+
+χα = 2 CαCαe γ
+
+S14 (7)
+
+α is given by (S48)
+
+---
+
+where Cα is the coefficient for all excited states and Cα that for all photonic states. Here,
+
+e
+
+γ
+
+we will derive this within the three state approximation.
+
+For the two polaritons associated with electronic state n, the coefficients are
+
+u/l
+
+u/l u/l C = cos(tan 1(Π ))Π (S49)
+
+γ, n
+
+n n
+
+u/l
+
+u/l C = cos(tan 1(Π (S50)
+
+e, n
+
+n
+
+Via substitution, one finds that χpol is given by the following:
+
+u/l
+
+u/l u/l χ = 2 cos2(tan 1(Π ))Π (S51)
+
+n
+
+n n
+
+Π u/l = 2 n (S52)
+
+u/l (Π 2 + 1 n
+
+u/l
+
+Φ
+
+Substituting Π
+
+n and algebraic manipulation yields the simplified expression
+
+n 2 +Φ2
+
+n n n
+
+u/l
+
+Φn
+
+p
+
+χ (22)
+
+n 2 + Φ2
+
+n n
+
+Helicity is given by a normalized difference of helical coefficients, namely
+
+Cα 2 − |Cα 2
+
+gα = 2 l
+
+r (S53) Cα 2 Cα 2
+
+l
+
+r
+
+Omitting common factors which cancel out, for both polaritons
+
+u/l (1 + σn (1 σn g = 2
+
+= 2σ .
+
+(21)
+
+n
+
+n (1 + σn) + (1 σ
+
+S15
+
+---
+
+## References
+
+(1) Azzam, R. Propagation of partially polarized light through anisotropic media with or
+
+without depolarization: a differential 4 4 matrix calculus. J. Opt. Sci. Am. 1978 68 1756–1767.
+
+(2) Brown, C. S. Unified formalism for treating polarization effects using Stokes parameters
+
+and the Lorentz group. Polarization Analysis and Measurement. 1992; pp 174 – 182.
+
+(3) Brown, C. S.; Bak, A. E. General Lorentz transformation and its application to deriving
+
+and evaluating the Mueller matrices of polarization optics. Polarization: Measurement,
+
+Analysis, and Remote Sensing II. 1999; pp 65 – 74.
+
+(4) Note that Brown seems to inadvertently change sign, which is fixed here.
+
+(5) Berova, N.; Polavarapu, P. L.; Nakanishi, K.; Woody, R. W. Comprehensive chiroptical
+
+spectroscopy Volume 1: Instrumentation, Methodologies, and Theoretical Simulations
+
+John Wiley & Sons, 2011; Vol. 1.
+
+(6) Agranovich, V. M.; Ginzburg, V. Crystal optics with spatial dispersion, and excitons
+
+2nd ed.; Springer Science & Business Media, 2013; Vol. 42.
+
+(7) Tavazzi, S.; Raimondo, L.; Silvestri, L.; Spearman, P.; Camposeo, A.; Polo, M.; Pisig-
+
+nano, D. Dielectric tensor of tetracene single crystals: The effect of anisotropy on
+
+polarized absorption and emission spectra. J. Chem. Phys. 2008 128, 154709.
+
+(8) Bassani, F.; P, P. G.; Ballinger, R. A. Electronic states and optical transitions in solids
+
+Franklin Book Co., 1993; Vol. 1.
+
+(9) Dresselhaus, M. S. Lecture notes in Solid State Physics Part II: Optical Properties of
+
+Solids. 2001.; [https://web.mit.edu/6.732/www/opt.pdf](https://web.mit.edu/6.732/www/opt.pdf)
+
+(10) Duke, C.; Mahan, G. Phonon-broadened impurity spectra. I. Density of states. Phys.
+
+Rev. 1965 139, 1965–1982.
+
+S16
+
+---
+
+(11) Zhu, Y.; Gauthier, D. J.; Morin, S.; Wu, Q.; Carmichael, H.; Mossberg, T. Vacuum
+
+Rabi splitting as a feature of linear-dispersion theory: Analysis and experimental ob-
+
+servations. Phys. Rev. Lett. 1990 64, 2499.
+
+(12) Jensen, H.; Schellman, J.; Troxell, T. Modulation techniques in polarization spec-
+
+troscopy. Appl. Spectrosc. 1978 32, 192–200.
+
+(13) Shindo, Y.; Nakagawa, M.; Ohmi, Y. On the Problems of CD Spectropolarimeters. II:
+
+Artifacts in CD Spectrometers. Appl. Spectrosc. 1985 39, 860–868.
+
+(14) Salij, A.; Goldsmith, R. H.; Tempelaar, R. Theory of Apparent Circular Dichroism
+
+Reveals the Origin of Inverted and Noninverted Chiroptical Response under Sample
+
+Flipping. J. Am. Chem. Soc. 2021 143, 21519–21531.
+
+(15) Baranov, D. G.; Wersall, M.; Cuadra, J.; Antosiewicz, T. J.; Shegai, T. Novel nanos-
+
+tructures and materials for strong light–matter interactions. ACS Photonics 2018 5 24–42.
+
+(16) Tavis, M.; Cummings, F. The exact solution of N two level systems interacting with a
+
+single mode, quantized radiation field. Phys. Lett. A 1967 25, 714–715.
+
+S17

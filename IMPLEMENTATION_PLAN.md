@@ -2102,8 +2102,8 @@ Ossikovski vs Chipman sign/normalization must match *live*, not memory):
 3. `berreman_mueller.py::mueller_from_jones_matrix` A-matrix (already mirrored
    in `transfer.rs::mueller_from_jones` — re-verify the `1/√2` factors).
 4. `extract_cd_mm_stack` / `get_m03_raw` CD formula (ll. 583–593, `berreman_mueller` l.776).
-5. `POLARIZANCE` / `brown_params` definitions if polarizance is wanted in v1
-   (ll. 658–746) — else defer to v2 explicitly.
+5. `POLARIZANCE` / `brown_params` definitions — deferred to Phase 11
+   (ll. 658–746; plan written, spike done, SI extracted).
 
 Record the transcribed formulas as doc-comments with line pointers, e.g.
 `// = mueller.py::cloude_decompose_matrix_stack, coherency via create_pauli_stack`.
@@ -2126,9 +2126,10 @@ SPIKE OUTCOME (executed at implementation; all from live source):
    ratio). The /2 lives on the TEST side (`raw/(2·M00)`), never absorbed
    into our API (which returns dimensionless M03/M00, matching live's
    `norm_mueller_matrix_stack` convention, mueller.py:1154).
-5. POLARIZANCE/Brown (ll. 658-746) = differential calculus over z-resolved
-   (b_vec, d_vec) — DEFERRED to v2 (needs Phase 2 fields). v1 = plain
-   normalized polarizance vector only.
+5. POLARIZANCE/Brown (ll. 658-746) — DEFERRED to v2. v1 = plain
+   normalized polarizance vector only. (Plan now WRITTEN as Phase 11,
+   with the spike premise corrected: no fields needed for the uniform
+   layer; live never wires it into their solver — see §11.0.)
 6. No `depolarization_index_*`, `diattenuation_stack`, or eigenvalue-returning
    Cloude entry point exists in live. G11a pins: D/P magnitudes + components
    vs `get_purity_components_mueller_matrix_stack` (mueller.py:1197-1210,
@@ -4076,6 +4077,134 @@ circular birefringence exactly (κ_sym) but differ in the interface factor
 at O(x) — the known parameterization inequivalence Cho argues; one more
 reason κ/Pasteur is canonical (§10.7). Physical rotation = k₀κd;
 arg(t_R)−arg(t_L) = 2k₀κd (half-ratio is the rotation).
+
+## Phase 11 (PLANNED) — POLARIZANCE v2: Brown differential Mueller decomposition
+
+Status: **detailed plan written, not yet implemented.** Grounded in the
+live source (spike below) and the primary literature (SI extracted this
+session). Size M. Follows the Phase-8 two-route pattern (live-compatible
+scalar path + our more general eigenpath) and the Phase-10
+literature-first discipline.
+
+### 11.0 Spike findings (live `BerreMueller/src/berremueller`, read this session)
+
+1. **The POLARIZANCE/Brown machinery is NOT wired into BerreMueller's own
+   Berreman solver.** `polarizance_from_linear_optics`, `brown_params`,
+   `POLARIZANCE` (mueller.py:658–746) and the `LINEAR_OPTICS` feed
+   (dielectric_tensor.py) are standalone material-level utilities — the
+   grep over `berreman_mueller.py`/`full_berreman.py`/`__init__.py` finds
+   zero call sites. They are the SI companion model for arXiv:2208.14461
+   (apparent circular dichroism, ACD).
+2. **`get_refractive_index_tensor(ε) = sqrt(ε)` elementwise** — live's
+   LD/LB formulas read `n_tensor[0,0]`, `n_tensor[1,1]`, i.e. √ε_xx, √ε_yy
+   (exact only for diagonal ε in the measurement basis; the 45°-rotation
+   variant supplies the x′y′ components). Our port must generalize to
+   non-diagonal tensors via the q-eigenvalues we already compute.
+3. **The P5 deferral premise "needs Phase 2 fields" is corrected:** the
+   uniform-layer differential calculus is material-tensor algebra; E(z)/H(z)
+   enter only for z-resolved (depth-varying β, d) studies, and there the
+   natural discretization is per-slice tensors (as in `twisted_tensors`),
+   not pointwise fields. v2 is therefore cheaper than P5 assumed.
+4. Live conventions that need bookkeeping (see 11.4): ω-vs-2π/λ scaling,
+   `length_over_c` unit scaling, the −1 sign factors in LD/LB, and the
+   `absorbance = max(two orientations)` stability hack (their comment:
+   prevents LD > absorbance nonphysicality at long paths).
+
+### 11.1 Literature index (all live-verified)
+
+- **Primary:** Salij, Goldsmith, Tempelaar, *Chiral polaritons … using
+  apparent circular dichroism*, arXiv:2208.14461v2 — **Supporting
+  Information** (anc/SI.pdf; extracted locally this session from a
+  user-provided download; formulas cited below by SI equation): §S2–S3 the
+  differential formalism `dM/dz = H·M`, `H = α·I + β·B̂ + d·D̂` (restricted
+  Lorentz-group algebra, 6 unique characteristics — mean absorption α
+  factors out diagonal); homogeneous sample → `M = exp(H·l)`; the Brown
+  polarizance parameters B₀…B₃ (S5–S9) as closed forms of
+  `p = β + i·d`, `R = Re p`, `I = Im p`, `N = |p|`; second-order
+  consistency relations (S10–S11) motivating Brown vs the 2nd-order
+  expansion of the differential matrix; ACD forward/backward differential
+  matrices (S12–S14, mirror-as-reciprocal-boundary justification).
+- **Brown 1999:** DOI 10.1117/12.366361 — verified resolving live
+  (HTTP 200). The a₀…a₃ forms live implements.
+- **Gil & Ossikovski**, *Polarized Light and the Mueller Matrix Approach*
+  — cited by live's `mueller_from_coherency_matrix` (their eq. 5.14); the
+  coherency ↔ Mueller side is already ours (G11).
+- **Lineage note (docs only):** the differential Mueller-matrix formalism
+  descends from the homogeneous-medium differential decomposition
+  (Ossikovski/De Martino lineage); we cite what the code base cites + the
+  SI; no deeper survey needed at implementation time.
+
+### 11.2 What we implement (design)
+
+**Route A — live-compatible scalar path (validation oracle):**
+`linear_optics_scalar(eps_diag, spectrum, length)` — assumes diagonal
+per-wavelength ε (broadcast diagonal (n_wl,3,3)):
+- `n = sqrt(ε)` elementwise (live semantics, recorded exactly);
+- `LD = −(n_yy.im − n_xx.im)·ω·L/c`, `LB = −(n_yy.re − n_xx.re)·ω·L/c`,
+  primes from the 45°-rotated tensor (`ε' = R(−45°)·ε·R(+45°)`);
+- `absorbance` per live's formula family — but **not** the max-hack:
+  compute both orientations, return both (caller policy), document.
+
+**Route B — our general eigenpath (the deliverable):** for a full
+per-layer tensor set `(eps, rho, rhop, mu)` take the **q-eigenvalues of
+the Berreman matrix at kx = 0** (already computed by our engine's
+eig4/cluster machinery) and derive the differential generator from them
+(generalizes LD/LB to chirality/MO — live cannot express these):
+- circular-basis mapping of (q±) → the (β, d) vectors via the same
+  convention discipline as G15b/G16 (polarization-basis mapping pinned,
+  not assumed);
+- `diff_mueller_matrix(beta3, d3)` — the 4×4 generator (antisymmetric
+  block structure, mean absorption diagonal) — batched;
+- `brown_params(r_p, i_p, n_p, length)` — a₀…a₃ closed form — batched;
+- `mueller_from_diff(beta, d, absorbance, length)` = `expm(H·l)` via the
+  existing `mat4_expm` (Phase 3) — no new deps.
+
+**Batching/wrapper:** one Rust call per array, Rayon over rows
+(post-architecture-review pattern); Python owns validation, shapes,
+warnings — same contract as the Mueller post-ops refactor.
+
+### 11.3 Gates G17 (`tests/test_polarizance.py`, analytic-only + live oracle)
+
+- **G17a (cross-formalism, the strong gate):** uniform birefringent +
+  dichroic slab — `mueller_from_diff` (expm of the generator) vs OUR full
+  4×4 Berreman `M_trans` for identical optical constants. Machine-precision
+  class (both are exact propagations of the same constitutive relations;
+  basis mapping validated, not assumed). Fixture: diagonal ε with distinct
+  n_x, n_y (+ loss), plus a (rho, rhop) Pasteur variant where live cannot
+  follow.
+- **G17b (live oracle):** Route-A LD/LB/absorbance and `brown_params` vs
+  live `linear_optics_from_dielectric_tensor` + `brown_params` on shared
+  diagonal fixtures (~1e-6 class, live complex64); the two-orientation
+  absorbance values compared independently.
+- **G17c (reductions):** isotropic layer → β = d = 0, p_m real scalar,
+  a-params reduce to the pure-absorption exponential; consistency with the
+  v1 `polarizance`/`diattenuation` vectors on the final M.
+- **G17d (z-resolution):** twisted-stack staircase of per-slice (β, d) —
+  `mueller_from_diff` per slice composed vs our `twisted_stack` solve;
+  G15d-style slice-convergence triple (12/24/48 → monotone).
+- **G17e (optional, SI consistency):** Brown B₀/B₁ vs the SI's second-order
+  relations (S10–S11) for small pathlengths — pins the formalism's own
+  approximation structure.
+
+### 11.4 Convention traps (decided up front)
+
+1. ω scaling: live multiplies by `spectrum` (angular frequency in their
+   units) — we pin ω = 2πc₀/λ (vacuum) and record the mapping.
+2. `length_over_c`: live's unit scaling knob — our API takes physical
+   thickness; keep the scaling OUT of the kernel.
+3. −1 signs in LD/LB (live's convention vs the standard differential
+   literature): derive from the cited SI equations, record the mapping.
+4. absorbance max-of-two-orientations hack: not inherited; return both,
+   document why live needs it.
+5. p = β + i·d complex polarizance vector: live's `p_matrix` mixes the
+   (b, d) into one complex vector — keep our API explicit (separate (β, d)
+   vectors), no silent mixing.
+
+### 11.5 Acceptance checklist
+
+Copy Appendix C checklist; gates G17a–e green; live-reference output pasted
+for G17b; README section + plan status row updated; no new crate deps
+(reuses mat4_expm); batched bindings only (no per-row Python loops).
 
 ## Appendix A — Upstream reference index (stable pointers)
 
