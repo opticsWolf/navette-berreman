@@ -3970,7 +3970,8 @@ Sources: 1204.5350 · 1501.01078 · 1605.06406 (bi-isotropic surface waves) ·
 2406.10277 (Tellegen/axion link). Full study in session notes; this section is
 the normative summary.
 
-### 10.8 Implementation findings (three — all caught by P10's own gates)
+### 10.8 Implementation findings (three — all caught by P10's own gates;
+our-engine namespace, unrelated to NAVETTE_UPSTREAM_REVIEW.md's F1–F4)
 
 **F1. `Wave::from_psi` ez/hz wrong for full-tensor layers (pre-existing
 since P1).** `from_psi` reconstructs `Ez = −(εzxEx+εzyEy+kx·Hy)/εzz`,

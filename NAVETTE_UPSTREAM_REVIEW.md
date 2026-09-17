@@ -9,8 +9,11 @@ F1 in its own docstrings — the dispute is about the model, and the fix is
 half a line).
 
 - **Scope:** `navette` 0.7.0 from crates.io (source audit) + the PyPI wheel
-  0.7.0 (live probing). Paths below are `src/smatrix/…` in the crate and
-  `navette/…` in the wheel.
+  0.7.0 (live probing). Re-audited against 0.7.7 (2026-09-18): crate source
+  diffed (NC path unchanged), parity tests re-run green, wheel re-probed —
+  F1 still present, F2 still present (`SQRT3 = 1.73205080757` confirmed in
+  0.7.7's `optics_core.rs:18`); F3 resolved, see its section. Paths below
+  are `src/smatrix/…` in the crate and `navette/…` in the wheel.
 - **Method:** source read of the `.crate`, direct Rust linkage tests against
   `w_function_inner` / `nevot_croce_factors` (`tests/navette_parity.rs` in
   our repo), and stack-level probing through the wheel (`tests/test_roughness.py`).

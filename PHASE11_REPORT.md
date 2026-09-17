@@ -300,8 +300,10 @@ O(1/n²) rate, measured rather than asserted.
 
 ## 10. Suggested follow-ups (not started)
 
-1. **F3** (NC lossy type-5 wheel drift) — unchanged plan, now the only
-   non-gating open defect.
+1. ~~**F3** (NC lossy type-5 wheel drift)~~ **RESOLVED 2026-09-18** — the
+   residual is the F1 transmission fork seen through reverberation, not an
+   upstream defect; see `F3_RESOLUTION.md` and the rewritten F3 section of
+   `NAVETTE_UPSTREAM_REVIEW.md`.
 2. **Release CI** (version-sync → 3-OS wheels → OIDC PyPI) + first tag.
 3. Optional: Brown-direction reconstruction (the full M from a₀..a₃ and the
    normalized (r̂, î) directions) if a user needs Brown-land API parity
